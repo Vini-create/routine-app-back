@@ -55,7 +55,7 @@ class User(Base, TimestampMixin):
     )
 
     language: Mapped[str] = mapped_column(
-        String(10),
+        String(30),
         default="english_us",
         nullable=False,
     )
@@ -63,6 +63,12 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+        nullable=False,
+    )
+
+    signature_plan: Mapped[str] = mapped_column(
+        String(30),
+        default="free",
         nullable=False,
     )
 
@@ -121,6 +127,11 @@ class User(Base, TimestampMixin):
     )
 
     feedbacks: Mapped[list["Feedback"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    auth_action_tokens: Mapped[list["AuthActionToken"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -240,4 +251,51 @@ class UserPreference(Base, TimestampMixin):
 
     user: Mapped["User"] = relationship(
         back_populates="preferences",
+    )
+
+class AuthActionToken(Base):
+    __tablename__ = "auth_action_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    token_hash: Mapped[str] = mapped_column(
+        Text,
+        unique=True,
+        nullable=False,
+    )
+
+    token_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    user: Mapped["User"] = relationship(
+        back_populates="auth_action_tokens",
     )

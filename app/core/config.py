@@ -11,5 +11,9 @@ class Settings(BaseSettings):
     algorithm: str
     access_token_expire_minutes: int
     refresh_token_expire_days: int
+    brevo_api_key: str
+    email_from_name: str
+    email_from_address: str
+    frontend_url: str
 
 settings = Settings()

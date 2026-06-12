@@ -9,7 +9,7 @@ from datetime import date
 
 class ChatMessageCreate(BaseModel):
     role: str
-    content: str
+    content: str = Field(min_length=1, max_length=3000)
     content_type: str = "text"
 
 class ChatMessageRead(BaseModel):
@@ -35,4 +35,4 @@ class FeedbackRequest(BaseModel):
 
 class CoachChatRequest(BaseModel):
     coach_profile_id: UUID
-    user_message: str
+    user_message: str = Field(min_length=1, max_length=3000)

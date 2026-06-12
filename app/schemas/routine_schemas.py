@@ -152,7 +152,7 @@ class HabitUpdate(BaseModel):
 class HabitRead(BaseModel):
     id: UUID
     goal_id: Optional[UUID] = None
-    name: str
+    name: str = Field(min_length = 2, max_length=60)    
     description: Optional[str] = None
 
 class HabitLogCreate(BaseModel):
