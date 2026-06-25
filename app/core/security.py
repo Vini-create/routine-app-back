@@ -33,11 +33,14 @@ def create_refresh_token() -> str:
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
-def get_user_id_from_token(token: str):
+def get_user_id_from_token(token: str, expected_type: str = "access"):
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
         if user_id is None:
+            raise ValueError("Invalid token")
+        if token_type != expected_type:
             raise ValueError("Invalid token")
         return user_id
     except JWTError:

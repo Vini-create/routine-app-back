@@ -15,5 +15,21 @@ class Settings(BaseSettings):
     email_from_name: str
     email_from_address: str
     frontend_url: str
+    log_backfill_limit_days: int
+    cors_origins: str
+    sql_echo: bool = False
+    rate_limit_storage_uri: str | None
+    routine_agenda_max_range_days: int
+    habits_dashboard_max_range_days: int
+    goals_dashboard_max_range_days: int
+    future_schedule_limit_years: int
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
 
 settings = Settings()

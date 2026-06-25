@@ -23,6 +23,10 @@ async def authenticate_user(session, email: str, password: str):
     user = await get_user_by_email(session, email)
     if not user:
         raise ValueError("Invalid credentials")
+    if not user.is_active or user.deleted_at is not None:
+        raise ValueError("Invalid credentials")
+    if not user.is_verified:
+        raise ValueError("Email not verified")
     credentials = await get_user_credentials_by_user_id(session, user.id) 
     if not credentials or not verify_password(password, credentials.password_hash):
         raise ValueError("Invalid credentials")
@@ -42,12 +46,18 @@ async def refresh_access_token(session, refresh_token: str):
     refresh_token_hash = hash_token(refresh_token)
     stored_refresh_token = await get_refresh_token_by_hash(session, refresh_token_hash)
     
-    if not stored_refresh_token or stored_refresh_token.expires_at < datetime.now(timezone.utc):
+    if (
+        not stored_refresh_token
+        or stored_refresh_token.revoked
+        or stored_refresh_token.expires_at < datetime.now(timezone.utc)
+    ):
         raise ValueError("Invalid or expired refresh token")
     
     user = await get_user_by_id(session, stored_refresh_token.user_id)
     if not user:
         raise ValueError("User not found")
+    if not user.is_active or user.deleted_at is not None or not user.is_verified:
+        raise ValueError("User not allowed")
     
     return create_access_token(data={"sub": str(user.id), "type": "access"})
 
@@ -93,4 +103,3 @@ async def request_password_reset(session, email: str) -> None:
     from app.services.email_service import send_password_reset_email
 
     await send_password_reset_email(user.email, token)
-

@@ -22,3 +22,6 @@ htmlcov/
 # OS / editor
 .DS_Store
 .vscode/
+
+steps.txt
+frontend_api_flow.txt
