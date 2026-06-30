@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from typing import Optional
 from uuid import UUID
 from enum import Enum
@@ -26,7 +26,13 @@ class UserCreate(BaseModel):
 
 class UserSimpleUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, min_length=2, max_length=100)
-    language: Optional[Languages] = Languages.ENGLISH_US
+    language: Optional[Languages] = None
+
+    @model_validator(mode="after")
+    def reject_null_language(self):
+        if "language" in self.model_fields_set and self.language is None:
+            raise ValueError("language cannot be null")
+        return self
 
 class UserLogin(BaseModel):
     email: EmailStr = Field(max_length=255)
@@ -53,6 +59,8 @@ class UserRegisterResponse(BaseModel):
     user_id: str
 
 class UserMeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     email: EmailStr
     display_name: Optional[str]

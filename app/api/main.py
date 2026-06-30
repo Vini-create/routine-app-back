@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.auth_routes import auth_router
+from app.api.auth_routes import auth_router, users_router
 from app.api.routine_routes import routine_router
 from app.core.config import settings
 import app.models #force the models to be registered before the app starts, ensuring that all tables are created when using SQLAlchemy's create_all() method.
@@ -28,4 +28,5 @@ async def health_check():
     return {"status": "healthy"}
 
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(routine_router)

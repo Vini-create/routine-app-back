@@ -5,9 +5,24 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 
 from app.models.auth import RefreshToken, User, UserCredential
-from app.repository.auth_repository import get_user_by_email, get_user_by_id, create_user, store_auth_action_token, update_user, delete_user, store_refresh_token, create_user_credentials, get_refresh_token_by_hash, get_user_credentials_by_user_id, verify_and_consume_auth_action_token, verify_and_set_new_password, set_user_verified, delete_auth_action_token
+from app.repository.auth_repository import (
+    create_user,
+    create_user_credentials,
+    deactivate_user_and_revoke_tokens,
+    get_refresh_token_by_hash,
+    get_user_by_email,
+    get_user_by_id,
+    get_user_credentials_by_user_id,
+    revoke_refresh_token_for_user,
+    set_user_verified,
+    store_auth_action_token,
+    store_refresh_token,
+    update_user,
+    verify_and_consume_auth_action_token,
+    verify_and_set_new_password,
+)
 from app.core.security import create_random_token, hash_password, verify_password, create_access_token, create_refresh_token, hash_token
-from app.schemas.auth_schemas import AuthActionTokenType
+from app.schemas.auth_schemas import AuthActionTokenType, UserSimpleUpdate
 
 async def register_user(session, email: str, display_name: str, language: str, password: str):
     existing_user = await get_user_by_email(session, email)
@@ -60,6 +75,21 @@ async def refresh_access_token(session, refresh_token: str):
         raise ValueError("User not allowed")
     
     return create_access_token(data={"sub": str(user.id), "type": "access"})
+
+
+async def update_current_user(session, user: User, payload: UserSimpleUpdate) -> User:
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(user, field, value.value if hasattr(value, "value") else value)
+    return await update_user(session, user)
+
+
+async def logout_session(session, user_id: str, refresh_token: str) -> None:
+    await revoke_refresh_token_for_user(session, user_id, hash_token(refresh_token))
+
+
+async def deactivate_current_user(session, user: User) -> None:
+    await deactivate_user_and_revoke_tokens(session, user)
 
 #when user requests password reset or email verification, we create an auth action token and store it in the database. When the user clicks the link in the email, we verify the token and perform the corresponding action (set user as verified or reset password):
 async def create_auth_action_token(session, user_id: str, token_type: AuthActionTokenType, expires_in_minutes: int = 30) -> str:

@@ -18,7 +18,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     
     user = await get_user_by_id(db, user_id)
-    if not user:
+    if not user or not user.is_active or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     
     return user
@@ -27,4 +27,3 @@ async def get_current_verified_user(current_user: User = Depends(get_current_use
     if not current_user.is_verified:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
     return current_user
-

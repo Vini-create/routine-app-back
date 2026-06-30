@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from app.models.auth import AuthActionToken
 from app.models.auth import User, RefreshToken, UserCredential
-from sqlalchemy import select
+from sqlalchemy import select, update
 from app.schemas.auth_schemas import AuthActionTokenType
 from app.core.security import hash_password
 
@@ -47,6 +47,41 @@ async def create_user_credentials(session, credential: UserCredential) -> UserCr
 async def get_refresh_token_by_hash(session, token_hash: str) -> RefreshToken | None:
     result = await session.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     return result.scalar_one_or_none()      
+
+
+async def revoke_refresh_token_for_user(
+    session,
+    user_id: str,
+    token_hash: str,
+) -> None:
+    # Scoping by user prevents a valid session from revoking another user's token.
+    await session.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.token_hash == token_hash,
+        )
+        .values(revoked=True)
+    )
+    await session.commit()
+
+
+async def deactivate_user_and_revoke_tokens(session, user: User) -> User:
+    # Keep related data under the existing soft-deletion strategy, but make every
+    # access and refresh token unusable immediately.
+    now = datetime.now(timezone.utc)
+    user.is_active = False
+    user.pending_deletion = True
+    user.deleted_at = now
+    session.add(user)
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id)
+        .values(revoked=True)
+    )
+    await session.commit()
+    await session.refresh(user)
+    return user
 
 async def get_user_credentials_by_user_id(session, user_id: str) -> UserCredential | None:
     result = await session.execute(select(UserCredential).where(UserCredential.user_id == user_id))
@@ -127,4 +162,3 @@ async def verify_and_set_new_password(session, token_hash: str, new_password: st
             await session.commit()
             return True
     return False
-

@@ -13,6 +13,7 @@ from app.schemas.routine_schemas import (
     ItemStatus,
     RoutineItemCreate,
     RoutineItemLogCreate,
+    RoutineItemsVacationCreate,
     RoutineItemUpdate,
     ScheduleType,
 )
@@ -156,18 +157,23 @@ def _group_occurrences_by_habit(occurrences: list[dict]) -> dict:
 
 def _build_habit_dashboard_item(habit, goal, occurrences: list[dict]) -> dict:
     # Builds one complete habit card with counts, consistency and daily statuses.
-    expected_count = len(occurrences)
+    counted_occurrences = [
+        occurrence
+        for occurrence in occurrences
+        if occurrence["status"] != ItemStatus.VACATION.value
+    ]
+    expected_count = len(counted_occurrences)
     completed_count = sum(
         occurrence["status"] == ItemStatus.COMPLETED.value
-        for occurrence in occurrences
+        for occurrence in counted_occurrences
     )
     uncompleted_count = sum(
         occurrence["status"] == ItemStatus.UNCOMPLETED.value
-        for occurrence in occurrences
+        for occurrence in counted_occurrences
     )
     pending_count = sum(
         occurrence["status"] == ItemStatus.PENDING.value
-        for occurrence in occurrences
+        for occurrence in counted_occurrences
     )
     consistency_percent = (
         round((completed_count / expected_count) * 100, 2)
@@ -385,6 +391,47 @@ async def save_routine_item_log(
     if not log:
         raise ValueError("Routine item not found")
     return log
+
+
+async def set_routine_items_vacation(
+    session,
+    user_id: UUID | str,
+    payload: RoutineItemsVacationCreate,
+):
+    _validate_range(
+        payload.start_date,
+        payload.end_date,
+        366 * settings.future_schedule_limit_years,
+        "Vacation",
+    )
+    _validate_not_too_far(payload.end_date, "end_date")
+
+    requested_ids = set(payload.routine_item_ids)
+    owned_items = await routine_repo.get_routine_items_by_ids(
+        session,
+        user_id,
+        requested_ids,
+    )
+    if len(owned_items) != len(requested_ids):
+        raise ValueError("One or more routine items were not found")
+
+    occurrences = await routine_repo.get_routine_items_by_range(
+        session,
+        user_id,
+        payload.start_date,
+        payload.end_date,
+    )
+    occurrence_keys = {
+        (occurrence["item"].id, occurrence["occurrence_date"])
+        for occurrence in occurrences
+        if occurrence["item"].id in requested_ids
+        and payload.start_date <= occurrence["occurrence_date"] <= payload.end_date
+    }
+    return await routine_repo.upsert_routine_item_vacation_logs(
+        session,
+        user_id,
+        occurrence_keys,
+    )
 
 
 async def create_habit(session, user_id: UUID | str, habit_data: HabitCreate):

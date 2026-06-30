@@ -148,6 +148,21 @@ async def get_routine_item(
     return result.scalar_one_or_none()
 
 
+async def get_routine_items_by_ids(
+    session,
+    user_id: UUID | str,
+    item_ids: set[UUID],
+) -> list[RoutineItem]:
+    result = await session.execute(
+        select(RoutineItem).where(
+            RoutineItem.id.in_(item_ids),
+            RoutineItem.user_id == user_id,
+            RoutineItem.archived_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def update_routine_item(
     session,
     user_id: UUID | str,
@@ -243,12 +258,19 @@ async def get_routine_items_by_range(
             continue
 
         if item.recurrence_rule:
+            item_range_end = range_end
+            if item.end_at is not None:
+                item_range_end = min(item_range_end, item.end_at)
+
             for occurrence in get_occurrences(
                 item.recurrence_rule,
                 item.start_at,
                 range_start,
-                range_end,
+                item_range_end,
             ):
+                # rrule.between is inclusive; the API's upper bound is not.
+                if occurrence >= range_end:
+                    continue
                 log = logs_index.get((item.id, occurrence.date()))
 
                 occurrences.append(
@@ -296,6 +318,49 @@ async def upsert_routine_item_log(
     await session.commit()
     await session.refresh(log)
     return log
+
+
+async def upsert_routine_item_vacation_logs(
+    session,
+    user_id: UUID | str,
+    occurrence_keys: set[tuple[UUID, date]],
+) -> list[RoutineItemLog]:
+    if not occurrence_keys:
+        return []
+
+    item_ids = {item_id for item_id, _ in occurrence_keys}
+    dates = {log_date for _, log_date in occurrence_keys}
+    result = await session.execute(
+        select(RoutineItemLog).where(
+            RoutineItemLog.user_id == user_id,
+            RoutineItemLog.routine_item_id.in_(item_ids),
+            RoutineItemLog.log_date.in_(dates),
+        )
+    )
+    existing = {
+        (log.routine_item_id, log.log_date): log
+        for log in result.scalars().all()
+    }
+
+    logs = []
+    for item_id, log_date in sorted(occurrence_keys, key=lambda key: (key[1], str(key[0]))):
+        log = existing.get((item_id, log_date))
+        if log is None:
+            log = RoutineItemLog(
+                user_id=user_id,
+                routine_item_id=item_id,
+                log_date=log_date,
+                status="vacation",
+            )
+            session.add(log)
+        else:
+            log.status = "vacation"
+        logs.append(log)
+
+    await session.commit()
+    for log in logs:
+        await session.refresh(log)
+    return logs
 
 async def create_habit(
     session,
@@ -470,6 +535,10 @@ async def get_habits_by_range(
             range_start,
             habit_range_end,
         ):
+            # habit_range_end is an exclusive API/goal boundary, while
+            # rrule.between(..., inc=True) includes it.
+            if occurrence >= habit_range_end:
+                continue
             log = logs_index.get((habit.id, occurrence.date()))
 
             occurrences.append(

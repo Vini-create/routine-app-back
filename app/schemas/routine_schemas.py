@@ -25,6 +25,7 @@ class ItemStatus(str, Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     UNCOMPLETED = "uncompleted"
+    VACATION = "vacation"
 
 class ItemType(str, Enum):
     HABIT = "habit"
@@ -195,6 +196,12 @@ class HabitLogCreate(BaseModel):
     habit_id: UUID
     log_date: date
     status: ItemStatus
+
+    @model_validator(mode="after")
+    def prevent_vacation_status(self):
+        if self.status == ItemStatus.VACATION:
+            raise ValueError("Vacation status is only supported for routine items")
+        return self
     
 class HabitLogUpdate(BaseModel):
     habit_id: Optional[UUID] = None
@@ -214,6 +221,24 @@ class RoutineItemLogCreate(BaseModel):
     routine_item_id: UUID
     log_date: date
     status: ItemStatus
+
+    @model_validator(mode="after")
+    def prevent_direct_vacation_log(self):
+        if self.status == ItemStatus.VACATION:
+            raise ValueError("Use /routine/items/vacation to register vacation periods")
+        return self
+
+
+class RoutineItemsVacationCreate(BaseModel):
+    routine_item_ids: list[UUID] = Field(min_length=1, max_length=100)
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def validate_period(self):
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must be greater than or equal to start_date")
+        return self
     
 class RoutineItemLogUpdate(BaseModel):
     routine_item_id: Optional[UUID] = None

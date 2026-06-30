@@ -25,6 +25,7 @@ from app.schemas.routine_schemas import (
     RoutineItemLogCreate,
     RoutineItemLogRead,
     RoutineItemRead,
+    RoutineItemsVacationCreate,
     RoutineItemUpdate,
 )
 from app.services import routine_service
@@ -149,6 +150,24 @@ async def save_routine_item_log(
     # Marks a routine item occurrence as completed/uncompleted within the allowed window.
     try:
         return await routine_service.save_routine_item_log(
+            session,
+            current_user.id,
+            payload,
+        )
+    except ValueError as error:
+        raise _bad_request(error)
+
+
+@routine_router.post("/items/vacation", response_model=list[RoutineItemLogRead])
+@limiter.limit("20/minute")
+async def set_routine_items_vacation(
+    request: Request,
+    payload: RoutineItemsVacationCreate,
+    session=Depends(get_session),
+    current_user: User = Depends(get_current_verified_user),
+):
+    try:
+        return await routine_service.set_routine_items_vacation(
             session,
             current_user.id,
             payload,

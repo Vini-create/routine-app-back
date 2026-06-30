@@ -3,13 +3,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.db import get_session
 from app.api.dependencies import get_current_user
-from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, ForgotPasswordRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
-from app.services.auth_service import register_user, authenticate_user, create_tokens_for_user, refresh_access_token, create_auth_action_token, request_password_reset, reset_password, verify_user
+from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
+from app.services.auth_service import register_user, authenticate_user, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_password_reset, reset_password, update_current_user, verify_user
 from app.services.email_service import send_verification_email
 from fastapi import Request
 from app.api.rate_limit import limiter
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
+users_router = APIRouter(prefix="/users", tags=["users"])
 
 @auth_router.post("/register", response_model=UserRegisterResponse)
 @limiter.limit("5/hour")
@@ -93,3 +94,36 @@ async def reset_password_route(
 async def read_current_user(request: Request, current_user=Depends(get_current_user)) -> UserMeResponse:
     return current_user
 
+
+@auth_router.patch("/me", response_model=UserMeResponse)
+@limiter.limit("30/minute")
+async def patch_current_user(
+    request: Request,
+    payload: UserSimpleUpdate,
+    session=Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    return await update_current_user(session, current_user, payload)
+
+
+@auth_router.post("/logout", response_model=MessageResponse)
+@limiter.limit("30/minute")
+async def logout(
+    request: Request,
+    payload: RefreshTokenSchema,
+    session=Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    await logout_session(session, current_user.id, payload.refresh_token)
+    return {"message": "Logout successful"}
+
+
+@users_router.delete("/me", response_model=MessageResponse)
+@limiter.limit("5/hour")
+async def delete_current_user(
+    request: Request,
+    session=Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    await deactivate_current_user(session, current_user)
+    return {"message": "Account deleted successfully"}
