@@ -55,7 +55,7 @@ jobs:
             -out "backup/$BACKUP_NAME.enc" \
             -pass env:BACKUP_PASSWORD
           sha256sum "backup/$BACKUP_NAME.enc" > "backup/$BACKUP_NAME.enc.sha256"
-          shred -u "backup/$BACKUP_NAME"
+          sudo shred -u "backup/$BACKUP_NAME"
 
       - name: Upload encrypted backup
         uses: actions/upload-artifact@v4
