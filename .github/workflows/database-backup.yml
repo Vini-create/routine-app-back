@@ -1,0 +1,69 @@
+name: Daily PostgreSQL backup
+
+on:
+  schedule:
+    # 03:17 UTC avoids the busier start-of-hour scheduling window.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Create encrypted database backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate required secrets
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_DATABASE_PUBLIC_URL }}
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "RAILWAY_DATABASE_PUBLIC_URL is not configured"; exit 1; }
+          test -n "$BACKUP_PASSWORD" || { echo "BACKUP_ENCRYPTION_PASSWORD is not configured"; exit 1; }
+
+      - name: Define backup name
+        run: echo "BACKUP_NAME=postgres-$(date -u +'%Y-%m-%dT%H-%M-%SZ').dump" >> "$GITHUB_ENV"
+
+      - name: Create PostgreSQL dump
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_DATABASE_PUBLIC_URL }}
+        run: |
+          mkdir -p backup
+          docker run --rm \
+            -e DATABASE_URL \
+            -e BACKUP_NAME \
+            -v "$PWD/backup:/backup" \
+            postgres:18-alpine \
+            sh -c 'pg_dump "$DATABASE_URL" \
+              --format=custom \
+              --no-owner \
+              --no-privileges \
+              --file="/backup/$BACKUP_NAME"'
+
+      - name: Encrypt and checksum backup
+        env:
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+        run: |
+          openssl enc -aes-256-cbc \
+            -salt \
+            -pbkdf2 \
+            -iter 200000 \
+            -in "backup/$BACKUP_NAME" \
+            -out "backup/$BACKUP_NAME.enc" \
+            -pass env:BACKUP_PASSWORD
+          sha256sum "backup/$BACKUP_NAME.enc" > "backup/$BACKUP_NAME.enc.sha256"
+          shred -u "backup/$BACKUP_NAME"
+
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_NAME }}-encrypted
+          path: |
+            backup/${{ env.BACKUP_NAME }}.enc
+            backup/${{ env.BACKUP_NAME }}.enc.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
