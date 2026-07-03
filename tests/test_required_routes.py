@@ -7,6 +7,7 @@ from app.core.security import create_access_token, hash_password, hash_token
 from app.models.auth import RefreshToken, User, UserCredential
 from app.models.routine import Goal, Habit, HabitLog, RoutineItem, RoutineItemLog
 from app.services.auth_service import create_tokens_for_user
+from app.services.email_service import EmailDeliveryError
 
 
 pytestmark = pytest.mark.asyncio
@@ -17,13 +18,14 @@ async def create_user(
     *,
     email: str = "user@example.com",
     display_name: str = "Original name",
+    is_verified: bool = True,
 ) -> User:
     user = User(
         email=email,
         display_name=display_name,
         language="english_us",
         is_active=True,
-        is_verified=True,
+        is_verified=is_verified,
     )
     session.add(user)
     await session.flush()
@@ -41,6 +43,46 @@ async def create_user(
 def auth_headers(user: User) -> dict[str, str]:
     token = create_access_token({"sub": str(user.id), "type": "access"})
     return {"Authorization": f"Bearer {token}"}
+
+
+async def test_register_reports_email_failure_without_losing_account(client, session, monkeypatch):
+    async def fail_delivery(*args, **kwargs):
+        raise EmailDeliveryError("provider unavailable")
+
+    monkeypatch.setattr("app.api.auth_routes.send_verification_email", fail_delivery)
+    response = await client.post(
+        "/auth/register",
+        json={
+            "email": "pending@example.com",
+            "password": "correct-password",
+            "display_name": "Pending user",
+            "language": "english_us",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "Account created" in response.json()["detail"]
+    user = (await session.execute(select(User).where(User.email == "pending@example.com"))).scalar_one()
+    assert user.is_verified is False
+
+
+async def test_resend_verification_is_generic_and_sends_for_pending_user(client, session, monkeypatch):
+    pending_user = await create_user(session, email="pending@example.com", is_verified=False)
+    delivered_to: list[str] = []
+
+    async def record_delivery(to_email: str, token: str):
+        delivered_to.append(to_email)
+        assert token
+
+    monkeypatch.setattr("app.services.auth_service.send_verification_email", record_delivery)
+
+    pending = await client.post("/auth/resend-verification", json={"email": pending_user.email})
+    missing = await client.post("/auth/resend-verification", json={"email": "missing@example.com"})
+
+    assert pending.status_code == 200
+    assert missing.status_code == 200
+    assert pending.json() == missing.json()
+    assert delivered_to == [pending_user.email]
 
 
 async def test_patch_me_is_partial_and_validates_fields(client, session):

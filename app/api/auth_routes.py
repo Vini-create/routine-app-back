@@ -3,9 +3,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.db import get_session
 from app.api.dependencies import get_current_user
-from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
-from app.services.auth_service import register_user, authenticate_user, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_password_reset, reset_password, update_current_user, verify_user
-from app.services.email_service import send_verification_email
+from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResendVerificationRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
+from app.services.auth_service import register_user, authenticate_user, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_email_verification, request_password_reset, reset_password, update_current_user, verify_user
+from app.services.email_service import EmailDeliveryError, send_verification_email
 from fastapi import Request
 from app.api.rate_limit import limiter
 
@@ -22,6 +22,31 @@ async def register(request: Request, user_create: UserCreate, session=Depends(ge
         return {"message": "User registered successfully", "user_id": str(user.id)}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except EmailDeliveryError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Account created, but the verification email could not be sent. Please try resending it.",
+        )
+
+
+@auth_router.post("/resend-verification", response_model=MessageResponse)
+@limiter.limit("3/hour")
+async def resend_verification_email(
+    request: Request,
+    payload: ResendVerificationRequest,
+    session=Depends(get_session),
+):
+    try:
+        await request_email_verification(session, payload.email.lower().strip())
+    except EmailDeliveryError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The verification email could not be sent. Please try again shortly.",
+        )
+
+    return {
+        "message": "If the account exists and still needs verification, a new email was sent"
+    }
     
 @auth_router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
@@ -64,7 +89,13 @@ async def forgot_password(request: Request,
     payload: ForgotPasswordRequest,
     session=Depends(get_session),
 ):
-    await request_password_reset(session, payload.email.lower().strip())
+    try:
+        await request_password_reset(session, payload.email.lower().strip())
+    except EmailDeliveryError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The password reset email could not be sent. Please try again shortly.",
+        )
 
     return {
         "message": "If the email exists, a password reset link was sent"

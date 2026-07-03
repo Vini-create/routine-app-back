@@ -1,6 +1,36 @@
+import logging
+
 import httpx
 
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
+
+
+class EmailDeliveryError(RuntimeError):
+    """Raised when the transactional email provider cannot accept a message."""
+
+
+async def _send_transactional_email(payload: dict) -> None:
+    headers = {
+        "api-key": settings.brevo_api_key,
+        "content-type": "application/json",
+        "accept": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                json=payload,
+                headers=headers,
+            )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        logger.exception("Transactional email delivery failed (status=%s)", status_code)
+        raise EmailDeliveryError("Transactional email delivery failed") from exc
 
 
 async def send_verification_email(to_email: str, token: str) -> None:
@@ -22,20 +52,7 @@ async def send_verification_email(to_email: str, token: str) -> None:
         """,
     }
 
-    headers = {
-        "api-key": settings.brevo_api_key,
-        "content-type": "application/json",
-        "accept": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(
-            "https://api.brevo.com/v3/smtp/email",
-            json=payload,
-            headers=headers,
-        )
-
-    response.raise_for_status()
+    await _send_transactional_email(payload)
 
 
 async def send_password_reset_email(to_email: str, token: str) -> None:
@@ -58,17 +75,4 @@ async def send_password_reset_email(to_email: str, token: str) -> None:
         """,
     }
 
-    headers = {
-        "api-key": settings.brevo_api_key,
-        "content-type": "application/json",
-        "accept": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(
-            "https://api.brevo.com/v3/smtp/email",
-            json=payload,
-            headers=headers,
-        )
-
-    response.raise_for_status()
+    await _send_transactional_email(payload)

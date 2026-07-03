@@ -23,6 +23,7 @@ from app.repository.auth_repository import (
 )
 from app.core.security import create_random_token, hash_password, verify_password, create_access_token, create_refresh_token, hash_token
 from app.schemas.auth_schemas import AuthActionTokenType, UserSimpleUpdate
+from app.services.email_service import send_password_reset_email, send_verification_email
 
 async def register_user(session, email: str, display_name: str, language: str, password: str):
     existing_user = await get_user_by_email(session, email)
@@ -130,6 +131,20 @@ async def request_password_reset(session, email: str) -> None:
         return
 
     token = await create_auth_action_token(session,user_id=str(user.id),token_type=AuthActionTokenType.PASSWORD_RESET,expires_in_minutes=30)
-    from app.services.email_service import send_password_reset_email
-
     await send_password_reset_email(user.email, token)
+
+
+async def request_email_verification(session, email: str) -> None:
+    user = await get_user_by_email(session, email)
+
+    # Keep the response generic so the endpoint cannot be used to enumerate accounts.
+    if not user or user.is_verified or not user.is_active or user.deleted_at is not None:
+        return
+
+    token = await create_auth_action_token(
+        session,
+        user_id=str(user.id),
+        token_type=AuthActionTokenType.EMAIL_VERIFICATION,
+        expires_in_minutes=1440,
+    )
+    await send_verification_email(user.email, token)

@@ -75,6 +75,9 @@ class AuthActionTokenVerify(BaseModel):
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(max_length=255)
 
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr = Field(max_length=255)
+
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=20, max_length=256)
     new_password: str = Field(min_length=8, max_length=72)
