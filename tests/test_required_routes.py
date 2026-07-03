@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select
@@ -9,7 +10,6 @@ from app.models.routine import Goal, Habit, HabitLog, RoutineItem, RoutineItemLo
 from app.schemas.auth_schemas import AuthActionTokenType
 from app.services.auth_service import create_auth_action_token, create_tokens_for_user
 from app.services.email_service import EmailDeliveryError
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -46,7 +46,9 @@ def auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_register_reports_email_failure_without_losing_account(client, session, monkeypatch):
+async def test_register_reports_email_failure_without_losing_account(
+    client, session, monkeypatch
+):
     async def fail_delivery(*args, **kwargs):
         raise EmailDeliveryError("provider unavailable")
 
@@ -63,12 +65,18 @@ async def test_register_reports_email_failure_without_losing_account(client, ses
 
     assert response.status_code == 503
     assert "Account created" in response.json()["detail"]
-    user = (await session.execute(select(User).where(User.email == "pending@example.com"))).scalar_one()
+    user = (
+        await session.execute(select(User).where(User.email == "pending@example.com"))
+    ).scalar_one()
     assert user.is_verified is False
 
 
-async def test_resend_verification_is_generic_and_sends_for_pending_user(client, session, monkeypatch):
-    pending_user = await create_user(session, email="pending@example.com", is_verified=False)
+async def test_resend_verification_is_generic_and_sends_for_pending_user(
+    client, session, monkeypatch
+):
+    pending_user = await create_user(
+        session, email="pending@example.com", is_verified=False
+    )
     delivered_to: list[str] = []
 
     async def record_delivery(to_email: str, token: str, language: str | None = None):
@@ -76,10 +84,16 @@ async def test_resend_verification_is_generic_and_sends_for_pending_user(client,
         assert token
         assert language == "english_us"
 
-    monkeypatch.setattr("app.services.auth_service.send_verification_email", record_delivery)
+    monkeypatch.setattr(
+        "app.services.auth_service.send_verification_email", record_delivery
+    )
 
-    pending = await client.post("/auth/resend-verification", json={"email": pending_user.email})
-    missing = await client.post("/auth/resend-verification", json={"email": "missing@example.com"})
+    pending = await client.post(
+        "/auth/resend-verification", json={"email": pending_user.email}
+    )
+    missing = await client.post(
+        "/auth/resend-verification", json={"email": "missing@example.com"}
+    )
 
     assert pending.status_code == 200
     assert missing.status_code == 200
@@ -284,6 +298,65 @@ async def test_vacation_is_excluded_from_consistency_counts(client, session):
     assert metrics["occurrences"][0]["status"] == "vacation"
 
 
+async def test_unlogged_past_occurrences_are_derived_as_uncompleted(client, session):
+    user = await create_user(session)
+    today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    yesterday = today - timedelta(days=1)
+    goal = Goal(user_id=user.id, title="Goal", target_date=today + timedelta(days=1))
+    session.add(goal)
+    await session.flush()
+
+    habit = Habit(
+        user_id=user.id,
+        goal_id=goal.id,
+        name="Habit",
+        duration_minutes=10,
+        recurrence_rule="FREQ=DAILY",
+        start_date=yesterday,
+    )
+    item = RoutineItem(
+        user_id=user.id,
+        title="Routine item",
+        schedule_type="recurring",
+        start_at=datetime.combine(yesterday, datetime.min.time(), tzinfo=timezone.utc),
+        end_at=datetime.combine(today, datetime.max.time(), tzinfo=timezone.utc),
+        duration_minutes=10,
+        recurrence_rule="FREQ=DAILY",
+        item_type="task",
+        status="active",
+    )
+    session.add_all([habit, item])
+    await session.commit()
+
+    agenda = await client.get(
+        "/routine/agenda",
+        headers=auth_headers(user),
+        params={"start_date": yesterday.isoformat(), "end_date": today.isoformat()},
+    )
+    dashboard = await client.get(
+        "/routine/habits/dashboard",
+        headers=auth_headers(user),
+        params={"start_date": yesterday.isoformat(), "end_date": today.isoformat()},
+    )
+
+    assert agenda.status_code == 200, agenda.text
+    assert dashboard.status_code == 200, dashboard.text
+    assert [row["status"] for row in agenda.json()["routine_items"]] == [
+        "uncompleted",
+        "pending",
+    ]
+    assert [row["status"] for row in agenda.json()["habits"]] == [
+        "uncompleted",
+        "pending",
+    ]
+
+    metrics = dashboard.json()["habits"][0]
+    assert metrics["uncompleted_count"] == 1
+    assert metrics["pending_count"] == 1
+    assert await session.scalar(select(func.count(HabitLog.id))) == 0
+    assert await session.scalar(select(func.count(RoutineItemLog.id))) == 0
+
+
 async def test_vacation_rejects_items_from_another_user_without_writes(client, session):
     user = await create_user(session)
     other_user = await create_user(session, email="other@example.com")
@@ -344,7 +417,9 @@ async def test_account_deletion_revokes_tokens_and_blocks_old_access(client, ses
     await session.flush()
     session.add_all(
         [
-            HabitLog(user_id=user.id, habit_id=habit.id, log_date=today, status="completed"),
+            HabitLog(
+                user_id=user.id, habit_id=habit.id, log_date=today, status="completed"
+            ),
             RoutineItemLog(
                 user_id=user.id,
                 routine_item_id=item.id,
@@ -416,10 +491,23 @@ async def test_reset_password_revokes_sessions_and_consumes_link(client, session
 
     assert reset.status_code == 200
     assert repeated.status_code == 400
-    assert (await client.post("/auth/refresh", json={"refresh_token": first_refresh})).status_code == 401
-    assert (await client.post("/auth/refresh", json={"refresh_token": second_refresh})).status_code == 401
-    assert (await client.post("/auth/login", json={"email": user.email, "password": "correct-password"})).status_code == 401
-    assert (await client.post("/auth/login", json={"email": user.email, "password": "a-new-secure-password"})).status_code == 200
+    assert (
+        await client.post("/auth/refresh", json={"refresh_token": first_refresh})
+    ).status_code == 401
+    assert (
+        await client.post("/auth/refresh", json={"refresh_token": second_refresh})
+    ).status_code == 401
+    assert (
+        await client.post(
+            "/auth/login", json={"email": user.email, "password": "correct-password"}
+        )
+    ).status_code == 401
+    assert (
+        await client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "a-new-secure-password"},
+        )
+    ).status_code == 200
 
 
 async def test_new_auth_link_invalidates_previous_link(session):
@@ -436,36 +524,55 @@ async def test_new_auth_link_invalidates_previous_link(session):
     )
 
     tokens = (
-        await session.execute(
-            select(AuthActionToken)
-            .where(AuthActionToken.user_id == user.id)
-            .order_by(AuthActionToken.created_at)
+        (
+            await session.execute(
+                select(AuthActionToken)
+                .where(AuthActionToken.user_id == user.id)
+                .order_by(AuthActionToken.created_at)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(tokens) == 2
     assert tokens[0].used_at is not None
     assert tokens[1].used_at is None
 
 
-async def test_change_password_requires_current_password_and_revokes_sessions(client, session):
+async def test_change_password_requires_current_password_and_revokes_sessions(
+    client, session
+):
     user = await create_user(session)
     _, refresh_token = await create_tokens_for_user(session, user)
 
     rejected = await client.post(
         "/auth/change-password",
         headers=auth_headers(user),
-        json={"current_password": "wrong-password", "new_password": "a-new-secure-password"},
+        json={
+            "current_password": "wrong-password",
+            "new_password": "a-new-secure-password",
+        },
     )
     changed = await client.post(
         "/auth/change-password",
         headers=auth_headers(user),
-        json={"current_password": "correct-password", "new_password": "a-new-secure-password"},
+        json={
+            "current_password": "correct-password",
+            "new_password": "a-new-secure-password",
+        },
     )
 
     assert rejected.status_code == 400
     assert changed.status_code == 200
-    assert (await client.post("/auth/refresh", json={"refresh_token": refresh_token})).status_code == 401
-    assert (await client.post("/auth/login", json={"email": user.email, "password": "a-new-secure-password"})).status_code == 200
+    assert (
+        await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    ).status_code == 401
+    assert (
+        await client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "a-new-secure-password"},
+        )
+    ).status_code == 200
 
 
 async def test_account_deletion_requires_password(client, session):

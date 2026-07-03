@@ -1,9 +1,11 @@
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import and_, or_, select
 
+from app.models.auth import User
 from app.models.routine import Goal, Habit, HabitLog, RoutineItem, RoutineItemLog
 from app.schemas.routine_schemas import (
     GoalCreate,
@@ -23,8 +25,33 @@ def _range_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]
         raise ValueError("end_date must be greater than or equal to start_date")
 
     range_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-    range_end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    range_end = datetime.combine(
+        end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+    )
     return range_start, range_end
+
+
+async def _user_local_date(session, user_id: UUID | str) -> date:
+    result = await session.execute(select(User.timezone).where(User.id == user_id))
+    timezone_name = result.scalar_one_or_none() or "UTC"
+
+    try:
+        user_timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        user_timezone = timezone.utc
+
+    return datetime.now(user_timezone).date()
+
+
+def _occurrence_status(log, occurrence_date: date, current_date: date) -> str:
+    """Derive the status of occurrences the user did not explicitly log."""
+    if log:
+        return log.status
+
+    if occurrence_date < current_date:
+        return "uncompleted"
+
+    return "pending"
 
 
 def _plain_value(value):
@@ -39,7 +66,9 @@ def _routine_item_payload(data: RoutineItemCreate | RoutineItemUpdate) -> dict:
     return _plain_payload(data.model_dump(exclude_unset=True))
 
 
-async def _goal_belongs_to_user(session, user_id: UUID | str, goal_id: UUID | str) -> bool:
+async def _goal_belongs_to_user(
+    session, user_id: UUID | str, goal_id: UUID | str
+) -> bool:
     result = await session.execute(
         select(Goal.id).where(
             Goal.id == goal_id,
@@ -88,7 +117,9 @@ async def update_goal(
     if not goal:
         return None
 
-    for field, value in _plain_payload(goal_data.model_dump(exclude_unset=True)).items():
+    for field, value in _plain_payload(
+        goal_data.model_dump(exclude_unset=True)
+    ).items():
         setattr(goal, field, value)
 
     await session.commit()
@@ -187,7 +218,9 @@ async def update_routine_item(
     return routine_item
 
 
-async def delete_routine_item(session, user_id: UUID | str, item_id: UUID | str) -> bool:
+async def delete_routine_item(
+    session, user_id: UUID | str, item_id: UUID | str
+) -> bool:
     routine_item = await get_routine_item(session, user_id, item_id)
     if not routine_item:
         return False
@@ -203,6 +236,7 @@ async def get_routine_items_by_range(
     start_date: date,
     end_date: date,
 ) -> list[dict]:
+    current_date = await _user_local_date(session, user_id)
     range_start, range_end = _range_bounds(start_date, end_date)
 
     result = await session.execute(
@@ -238,8 +272,7 @@ async def get_routine_items_by_range(
         )
     )
     logs_index = {
-        (log.routine_item_id, log.log_date): log
-        for log in logs_result.scalars().all()
+        (log.routine_item_id, log.log_date): log for log in logs_result.scalars().all()
     }
 
     for item in result.scalars().all():
@@ -251,7 +284,9 @@ async def get_routine_items_by_range(
                     "item": item,
                     "occurrence_at": item.start_at,
                     "occurrence_date": item.start_at.date(),
-                    "status": log.status if log else "pending",
+                    "status": _occurrence_status(
+                        log, item.start_at.date(), current_date
+                    ),
                     "log_id": log.id if log else None,
                 }
             )
@@ -278,7 +313,9 @@ async def get_routine_items_by_range(
                         "item": item,
                         "occurrence_at": occurrence,
                         "occurrence_date": occurrence.date(),
-                        "status": log.status if log else "pending",
+                        "status": _occurrence_status(
+                            log, occurrence.date(), current_date
+                        ),
                         "log_id": log.id if log else None,
                     }
                 )
@@ -338,12 +375,13 @@ async def upsert_routine_item_vacation_logs(
         )
     )
     existing = {
-        (log.routine_item_id, log.log_date): log
-        for log in result.scalars().all()
+        (log.routine_item_id, log.log_date): log for log in result.scalars().all()
     }
 
     logs = []
-    for item_id, log_date in sorted(occurrence_keys, key=lambda key: (key[1], str(key[0]))):
+    for item_id, log_date in sorted(
+        occurrence_keys, key=lambda key: (key[1], str(key[0]))
+    ):
         log = existing.get((item_id, log_date))
         if log is None:
             log = RoutineItemLog(
@@ -361,6 +399,7 @@ async def upsert_routine_item_vacation_logs(
     for log in logs:
         await session.refresh(log)
     return logs
+
 
 async def create_habit(
     session,
@@ -484,6 +523,7 @@ async def get_habits_by_range(
     start_date: date,
     end_date: date,
 ) -> list[dict]:
+    current_date = await _user_local_date(session, user_id)
     range_start, range_end = _range_bounds(start_date, end_date)
 
     result = await session.execute(
@@ -515,15 +555,18 @@ async def get_habits_by_range(
         )
     )
     logs_index = {
-        (log.habit_id, log.log_date): log
-        for log in logs_result.scalars().all()
+        (log.habit_id, log.log_date): log for log in logs_result.scalars().all()
     }
 
     for habit, goal in result.all():
-        habit_start_at = datetime.combine(habit.start_date, time.min, tzinfo=timezone.utc)
+        habit_start_at = datetime.combine(
+            habit.start_date, time.min, tzinfo=timezone.utc
+        )
         habit_range_end = min(
             range_end,
-            datetime.combine(goal.target_date + timedelta(days=1), time.min, tzinfo=timezone.utc),
+            datetime.combine(
+                goal.target_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+            ),
         )
 
         if habit_range_end <= range_start:
@@ -546,7 +589,7 @@ async def get_habits_by_range(
                     "habit": habit,
                     "goal": goal,
                     "occurrence_date": occurrence.date(),
-                    "status": log.status if log else "pending",
+                    "status": _occurrence_status(log, occurrence.date(), current_date),
                     "log_id": log.id if log else None,
                 }
             )
