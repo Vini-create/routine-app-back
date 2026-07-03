@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.db import get_session
 from app.api.dependencies import get_current_user
-from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResendVerificationRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
-from app.services.auth_service import register_user, authenticate_user, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_email_verification, request_password_reset, reset_password, update_current_user, verify_user
+from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, ChangePasswordRequest, DeleteAccountRequest, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResendVerificationRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
+from app.services.auth_service import register_user, authenticate_user, change_current_user_password, confirm_password, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_email_verification, request_password_reset, reset_password, update_current_user, verify_user
 from app.services.email_service import EmailDeliveryError, send_verification_email
 from fastapi import Request
 from app.api.rate_limit import limiter
@@ -18,7 +18,7 @@ async def register(request: Request, user_create: UserCreate, session=Depends(ge
     try:
         user, credentials = await register_user(session, user_create.email.lower().strip(), user_create.display_name, user_create.language.value, user_create.password)
         token = await create_auth_action_token(session, user_id=str(user.id), token_type=AuthActionTokenType.EMAIL_VERIFICATION, expires_in_minutes=1440)
-        await send_verification_email(to_email=user.email, token=token)
+        await send_verification_email(to_email=user.email, token=token, language=user.language)
         return {"message": "User registered successfully", "user_id": str(user.id)}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -137,6 +137,26 @@ async def patch_current_user(
     return await update_current_user(session, current_user, payload)
 
 
+@auth_router.post("/change-password", response_model=MessageResponse)
+@limiter.limit("5/hour")
+async def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    session=Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    try:
+        await change_current_user_password(
+            session,
+            current_user,
+            payload.current_password,
+            payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {"message": "Password updated successfully. Sign in again on your devices."}
+
+
 @auth_router.post("/logout", response_model=MessageResponse)
 @limiter.limit("30/minute")
 async def logout(
@@ -153,8 +173,13 @@ async def logout(
 @limiter.limit("5/hour")
 async def delete_current_user(
     request: Request,
+    payload: DeleteAccountRequest,
     session=Depends(get_session),
     current_user=Depends(get_current_user),
 ):
+    try:
+        await confirm_password(session, current_user, payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     await deactivate_current_user(session, current_user)
     return {"message": "Account deleted successfully"}

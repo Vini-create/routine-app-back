@@ -82,6 +82,13 @@ class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=20, max_length=256)
     new_password: str = Field(min_length=8, max_length=72)
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=8, max_length=72)
+
 class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=20, max_length=256)
 

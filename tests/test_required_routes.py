@@ -4,9 +4,10 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.security import create_access_token, hash_password, hash_token
-from app.models.auth import RefreshToken, User, UserCredential
+from app.models.auth import AuthActionToken, RefreshToken, User, UserCredential
 from app.models.routine import Goal, Habit, HabitLog, RoutineItem, RoutineItemLog
-from app.services.auth_service import create_tokens_for_user
+from app.schemas.auth_schemas import AuthActionTokenType
+from app.services.auth_service import create_auth_action_token, create_tokens_for_user
 from app.services.email_service import EmailDeliveryError
 
 
@@ -70,9 +71,10 @@ async def test_resend_verification_is_generic_and_sends_for_pending_user(client,
     pending_user = await create_user(session, email="pending@example.com", is_verified=False)
     delivered_to: list[str] = []
 
-    async def record_delivery(to_email: str, token: str):
+    async def record_delivery(to_email: str, token: str, language: str | None = None):
         delivered_to.append(to_email)
         assert token
+        assert language == "english_us"
 
     monkeypatch.setattr("app.services.auth_service.send_verification_email", record_delivery)
 
@@ -353,7 +355,12 @@ async def test_account_deletion_revokes_tokens_and_blocks_old_access(client, ses
     )
     await session.commit()
 
-    deleted = await client.delete("/users/me", headers=access_headers)
+    deleted = await client.request(
+        "DELETE",
+        "/users/me",
+        headers=access_headers,
+        json={"password": "correct-password"},
+    )
     assert deleted.status_code == 200
 
     await session.refresh(user)
@@ -386,3 +393,91 @@ async def test_account_deletion_revokes_tokens_and_blocks_old_access(client, ses
     assert first_refresh_response.status_code == 401
     assert second_refresh_response.status_code == 401
     assert login.status_code == 401
+
+
+async def test_reset_password_revokes_sessions_and_consumes_link(client, session):
+    user = await create_user(session)
+    _, first_refresh = await create_tokens_for_user(session, user)
+    _, second_refresh = await create_tokens_for_user(session, user)
+    reset_token = await create_auth_action_token(
+        session,
+        str(user.id),
+        AuthActionTokenType.PASSWORD_RESET,
+    )
+
+    reset = await client.post(
+        "/auth/reset-password",
+        json={"token": reset_token, "new_password": "a-new-secure-password"},
+    )
+    repeated = await client.post(
+        "/auth/reset-password",
+        json={"token": reset_token, "new_password": "another-secure-password"},
+    )
+
+    assert reset.status_code == 200
+    assert repeated.status_code == 400
+    assert (await client.post("/auth/refresh", json={"refresh_token": first_refresh})).status_code == 401
+    assert (await client.post("/auth/refresh", json={"refresh_token": second_refresh})).status_code == 401
+    assert (await client.post("/auth/login", json={"email": user.email, "password": "correct-password"})).status_code == 401
+    assert (await client.post("/auth/login", json={"email": user.email, "password": "a-new-secure-password"})).status_code == 200
+
+
+async def test_new_auth_link_invalidates_previous_link(session):
+    user = await create_user(session, is_verified=False)
+    await create_auth_action_token(
+        session,
+        str(user.id),
+        AuthActionTokenType.EMAIL_VERIFICATION,
+    )
+    await create_auth_action_token(
+        session,
+        str(user.id),
+        AuthActionTokenType.EMAIL_VERIFICATION,
+    )
+
+    tokens = (
+        await session.execute(
+            select(AuthActionToken)
+            .where(AuthActionToken.user_id == user.id)
+            .order_by(AuthActionToken.created_at)
+        )
+    ).scalars().all()
+    assert len(tokens) == 2
+    assert tokens[0].used_at is not None
+    assert tokens[1].used_at is None
+
+
+async def test_change_password_requires_current_password_and_revokes_sessions(client, session):
+    user = await create_user(session)
+    _, refresh_token = await create_tokens_for_user(session, user)
+
+    rejected = await client.post(
+        "/auth/change-password",
+        headers=auth_headers(user),
+        json={"current_password": "wrong-password", "new_password": "a-new-secure-password"},
+    )
+    changed = await client.post(
+        "/auth/change-password",
+        headers=auth_headers(user),
+        json={"current_password": "correct-password", "new_password": "a-new-secure-password"},
+    )
+
+    assert rejected.status_code == 400
+    assert changed.status_code == 200
+    assert (await client.post("/auth/refresh", json={"refresh_token": refresh_token})).status_code == 401
+    assert (await client.post("/auth/login", json={"email": user.email, "password": "a-new-secure-password"})).status_code == 200
+
+
+async def test_account_deletion_requires_password(client, session):
+    user = await create_user(session)
+
+    rejected = await client.request(
+        "DELETE",
+        "/users/me",
+        headers=auth_headers(user),
+        json={"password": "wrong-password"},
+    )
+
+    assert rejected.status_code == 400
+    await session.refresh(user)
+    assert user.is_active is True
