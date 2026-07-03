@@ -83,6 +83,7 @@ class GoalRead(BaseModel):
     description: Optional[str] = None
     category: Optional[GoalCategory] = None
     target_date: Optional[date] = None
+    created_at: datetime
 
 
 class RoutineItemCreate(BaseModel):

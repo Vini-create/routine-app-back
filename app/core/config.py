@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     habits_dashboard_max_range_days: int
     goals_dashboard_max_range_days: int
     future_schedule_limit_years: int
+    google_client_id: str | None = None
+    login_code_expire_minutes: int = 10
+    login_code_max_attempts: int = 5
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -48,9 +51,8 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [
-            origin.strip()
-            for origin in self.cors_origins.split(",")
-            if origin.strip()
+            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
         ]
+
 
 settings = Settings()

@@ -1,10 +1,51 @@
-#rotas de autenticação
+# rotas de autenticação
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.db import get_session
 from app.api.dependencies import get_current_user
-from app.schemas.auth_schemas import AccessToken, AuthActionTokenType, ChangePasswordRequest, DeleteAccountRequest, UserCreate, UserLogin, RefreshTokenSchema, Token, UserRegisterResponse, UserMeResponse, UserSimpleUpdate, ForgotPasswordRequest, ResendVerificationRequest, ResetPasswordRequest, VerifyEmailRequest, MessageResponse
-from app.services.auth_service import register_user, authenticate_user, change_current_user_password, confirm_password, create_tokens_for_user, refresh_access_token, create_auth_action_token, deactivate_current_user, logout_session, request_email_verification, request_password_reset, reset_password, update_current_user, verify_user
+from app.schemas.auth_schemas import (
+    AccessToken,
+    AuthActionTokenType,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    GoogleChallengeResponse,
+    GoogleLoginRequest,
+    LoginChallengeResponse,
+    LoginCodeResendRequest,
+    LoginCodeVerifyRequest,
+    UserCreate,
+    UserLogin,
+    RefreshTokenSchema,
+    Token,
+    UserRegisterResponse,
+    UserMeResponse,
+    UserSimpleUpdate,
+    ForgotPasswordRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    VerifyEmailRequest,
+    MessageResponse,
+)
+from app.services.auth_service import (
+    authenticate_with_google,
+    change_current_user_password,
+    confirm_password,
+    create_google_login_challenge,
+    create_tokens_for_user,
+    refresh_access_token,
+    create_auth_action_token,
+    deactivate_current_user,
+    logout_session,
+    register_user,
+    request_email_verification,
+    request_password_reset,
+    resend_password_login_code,
+    reset_password,
+    start_password_login,
+    update_current_user,
+    verify_password_login,
+    verify_user,
+)
 from app.services.email_service import EmailDeliveryError, send_verification_email
 from fastapi import Request
 from app.api.rate_limit import limiter
@@ -12,13 +53,29 @@ from app.api.rate_limit import limiter
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 users_router = APIRouter(prefix="/users", tags=["users"])
 
+
 @auth_router.post("/register", response_model=UserRegisterResponse)
 @limiter.limit("5/hour")
-async def register(request: Request, user_create: UserCreate, session=Depends(get_session)):
+async def register(
+    request: Request, user_create: UserCreate, session=Depends(get_session)
+):
     try:
-        user, credentials = await register_user(session, user_create.email.lower().strip(), user_create.display_name, user_create.language.value, user_create.password)
-        token = await create_auth_action_token(session, user_id=str(user.id), token_type=AuthActionTokenType.EMAIL_VERIFICATION, expires_in_minutes=1440)
-        await send_verification_email(to_email=user.email, token=token, language=user.language)
+        user, credentials = await register_user(
+            session,
+            user_create.email.lower().strip(),
+            user_create.display_name,
+            user_create.language.value,
+            user_create.password,
+        )
+        token = await create_auth_action_token(
+            session,
+            user_id=str(user.id),
+            token_type=AuthActionTokenType.EMAIL_VERIFICATION,
+            expires_in_minutes=1440,
+        )
+        await send_verification_email(
+            to_email=user.email, token=token, language=user.language
+        )
         return {"message": "User registered successfully", "user_id": str(user.id)}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -47,29 +104,138 @@ async def resend_verification_email(
     return {
         "message": "If the account exists and still needs verification, a new email was sent"
     }
-    
-@auth_router.post("/login", response_model=Token)
+
+
+@auth_router.post("/login", response_model=LoginChallengeResponse)
 @limiter.limit("5/minute")
 async def login(request: Request, user_login: UserLogin, session=Depends(get_session)):
     try:
-        user = await authenticate_user(session, user_login.email.lower().strip(), user_login.password)
-        access_token, refresh_token = await create_tokens_for_user(session, user)
-        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+        challenge, masked_email = await start_password_login(
+            session,
+            user_login.email.lower().strip(),
+            user_login.password,
+        )
+        return {
+            "challenge_id": challenge.id,
+            "masked_email": masked_email,
+            "expires_at": challenge.expires_at.isoformat(),
+        }
+    except EmailDeliveryError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The login code could not be sent. Please try again shortly.",
+        )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        code = (
+            status.HTTP_403_FORBIDDEN
+            if str(e) == "Email not verified"
+            else status.HTTP_401_UNAUTHORIZED
+        )
+        raise HTTPException(status_code=code, detail=str(e))
+
+
+@auth_router.post("/login/verify", response_model=Token)
+@limiter.limit("10/minute")
+async def verify_login_code(
+    request: Request,
+    payload: LoginCodeVerifyRequest,
+    session=Depends(get_session),
+):
+    try:
+        user = await verify_password_login(session, payload.challenge_id, payload.code)
+        access_token, refresh_token = await create_tokens_for_user(session, user)
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+
+
+@auth_router.post("/login/resend", response_model=LoginChallengeResponse)
+@limiter.limit("3/hour")
+async def resend_login_code(
+    request: Request,
+    payload: LoginCodeResendRequest,
+    session=Depends(get_session),
+):
+    try:
+        challenge, masked_email = await resend_password_login_code(
+            session, payload.challenge_id
+        )
+        return {
+            "challenge_id": challenge.id,
+            "masked_email": masked_email,
+            "expires_at": challenge.expires_at.isoformat(),
+        }
+    except EmailDeliveryError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The login code could not be sent. Please try again shortly.",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@auth_router.post("/google/challenge", response_model=GoogleChallengeResponse)
+@limiter.limit("20/minute")
+async def google_challenge(request: Request, session=Depends(get_session)):
+    try:
+        challenge, nonce = await create_google_login_challenge(session)
+        return {
+            "challenge_id": challenge.id,
+            "nonce": nonce,
+            "expires_at": challenge.expires_at.isoformat(),
+        }
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        )
+
+
+@auth_router.post("/google", response_model=Token)
+@limiter.limit("10/minute")
+async def google_login(
+    request: Request,
+    payload: GoogleLoginRequest,
+    session=Depends(get_session),
+):
+    try:
+        user = await authenticate_with_google(
+            session,
+            payload.challenge_id,
+            payload.credential,
+            payload.language.value,
+        )
+        access_token, refresh_token = await create_tokens_for_user(session, user)
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+
 
 @auth_router.post("/refresh", response_model=AccessToken)
 @limiter.limit("10/minute")
-async def refresh_token(request: Request, refresh_token: RefreshTokenSchema, session=Depends(get_session)):
+async def refresh_token(
+    request: Request, refresh_token: RefreshTokenSchema, session=Depends(get_session)
+):
     try:
-        new_access_token = await refresh_access_token(session, refresh_token.refresh_token)
+        new_access_token = await refresh_access_token(
+            session, refresh_token.refresh_token
+        )
         return {"access_token": new_access_token, "token_type": "bearer"}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    
+
+
 @auth_router.post("/verify-email", response_model=MessageResponse)
 @limiter.limit("10/minute")
-async def verify_email_route(request: Request,
+async def verify_email_route(
+    request: Request,
     payload: VerifyEmailRequest,
     session=Depends(get_session),
 ):
@@ -83,9 +249,11 @@ async def verify_email_route(request: Request,
 
     return {"message": "Email verified successfully"}
 
+
 @auth_router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("3/hour")
-async def forgot_password(request: Request,
+async def forgot_password(
+    request: Request,
     payload: ForgotPasswordRequest,
     session=Depends(get_session),
 ):
@@ -97,9 +265,8 @@ async def forgot_password(request: Request,
             detail="The password reset email could not be sent. Please try again shortly.",
         )
 
-    return {
-        "message": "If the email exists, a password reset link was sent"
-    }
+    return {"message": "If the email exists, a password reset link was sent"}
+
 
 @auth_router.post("/reset-password", response_model=MessageResponse)
 @limiter.limit("3/minute")
@@ -120,9 +287,12 @@ async def reset_password_route(
 
     ### ------------- ROTAS PROTEGIDAS: ------------- ###
 
+
 @auth_router.get("/me", response_model=UserMeResponse)
 @limiter.limit("60/minute")
-async def read_current_user(request: Request, current_user=Depends(get_current_user)) -> UserMeResponse:
+async def read_current_user(
+    request: Request, current_user=Depends(get_current_user)
+) -> UserMeResponse:
     return current_user
 
 

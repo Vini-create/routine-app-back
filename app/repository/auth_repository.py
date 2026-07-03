@@ -7,8 +7,9 @@ from sqlalchemy.exc import IntegrityError
 from app.schemas.auth_schemas import AuthActionTokenType
 from app.core.security import hash_password
 
+
 async def get_user_by_email(session, email: str) -> User | None:
-    result =await session.execute(select(User).where(User.email == email))
+    result = await session.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
 
 
@@ -36,24 +37,30 @@ async def create_user_with_credentials(
         await session.rollback()
         raise ValueError("Email already registered") from exc
 
+
 async def update_user(session, user: User) -> User:
     session.add(user)
     await session.commit()
     await session.refresh(user)
     return user
 
+
 async def delete_user(session, user: User) -> None:
     await session.delete(user)
     await session.commit()
+
 
 async def store_refresh_token(session, token: RefreshToken) -> RefreshToken:
     session.add(token)
     await session.commit()
     return token
 
+
 async def get_refresh_token_by_hash(session, token_hash: str) -> RefreshToken | None:
-    result = await session.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
-    return result.scalar_one_or_none()      
+    result = await session.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    return result.scalar_one_or_none()
 
 
 async def revoke_refresh_token_for_user(
@@ -82,19 +89,29 @@ async def deactivate_user_and_revoke_tokens(session, user: User) -> User:
     user.deleted_at = now
     session.add(user)
     await session.execute(
-        update(RefreshToken)
-        .where(RefreshToken.user_id == user.id)
-        .values(revoked=True)
+        update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
     )
     await session.commit()
     await session.refresh(user)
     return user
 
-async def get_user_credentials_by_user_id(session, user_id: str) -> UserCredential | None:
-    result = await session.execute(select(UserCredential).where(UserCredential.user_id == user_id))
+
+async def get_user_credentials_by_user_id(
+    session, user_id: str
+) -> UserCredential | None:
+    result = await session.execute(
+        select(UserCredential).where(UserCredential.user_id == user_id)
+    )
     return result.scalar_one_or_none()
 
-async def store_auth_action_token(session, user_id: str, token_type: AuthActionTokenType, token_hash: str, expires_at: datetime) -> AuthActionToken:
+
+async def store_auth_action_token(
+    session,
+    user_id: str,
+    token_type: AuthActionTokenType,
+    token_hash: str,
+    expires_at: datetime,
+) -> AuthActionToken:
     now = datetime.now(timezone.utc)
     # A newly issued link replaces older links of the same type. This avoids
     # leaving several valid verification/reset links in different inboxes.
@@ -112,7 +129,7 @@ async def store_auth_action_token(session, user_id: str, token_type: AuthActionT
         user_id=user_id,
         token_hash=token_hash,
         token_type=token_type,
-        expires_at=expires_at
+        expires_at=expires_at,
     )
 
     session.add(auth_action_token)
@@ -121,15 +138,18 @@ async def store_auth_action_token(session, user_id: str, token_type: AuthActionT
 
     return auth_action_token
 
+
 async def verify_email_with_token(session, token_hash: str) -> bool:
     now = datetime.now(timezone.utc)
     result = await session.execute(
-        select(AuthActionToken).where(
+        select(AuthActionToken)
+        .where(
             AuthActionToken.token_hash == token_hash,
             AuthActionToken.token_type == AuthActionTokenType.EMAIL_VERIFICATION,
             AuthActionToken.expires_at > now,
             AuthActionToken.used_at.is_(None),
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     auth_action_token = result.scalar_one_or_none()
     if not auth_action_token:
@@ -145,28 +165,42 @@ async def verify_email_with_token(session, token_hash: str) -> bool:
     await session.commit()
     return True
 
-#forgot password:
-async def verify_and_set_new_password(session, token_hash: str, new_password: str) -> bool:
+
+# forgot password:
+async def verify_and_set_new_password(
+    session, token_hash: str, new_password: str
+) -> bool:
     now = datetime.now(timezone.utc)
     result = await session.execute(
-        select(AuthActionToken).where(
+        select(AuthActionToken)
+        .where(
             AuthActionToken.token_hash == token_hash,
             AuthActionToken.token_type == AuthActionTokenType.PASSWORD_RESET,
             AuthActionToken.expires_at > now,
-            AuthActionToken.used_at.is_(None)
-        ).with_for_update()
+            AuthActionToken.used_at.is_(None),
+        )
+        .with_for_update()
     )
     auth_action_token = result.scalar_one_or_none()
     if not auth_action_token:
         return False
 
-    credential = await get_user_credentials_by_user_id(session, auth_action_token.user_id)
+    credential = await get_user_credentials_by_user_id(
+        session, auth_action_token.user_id
+    )
     if not credential:
+        credential = UserCredential(
+            user_id=auth_action_token.user_id,
+            password_hash=hash_password(new_password),
+        )
+    else:
+        credential.password_hash = hash_password(new_password)
+    user = await get_user_by_id(session, auth_action_token.user_id)
+    if not user:
         return False
-
-    credential.password_hash = hash_password(new_password)
+    user.has_password = True
     auth_action_token.used_at = now
-    session.add_all([credential, auth_action_token])
+    session.add_all([credential, auth_action_token, user])
     await session.execute(
         update(RefreshToken)
         .where(RefreshToken.user_id == auth_action_token.user_id)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     func,
+    UniqueConstraint,
 )
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -23,9 +24,10 @@ from sqlalchemy.orm import (
 from app.models.models import TimestampMixin
 from app.db.db import Base
 
-if TYPE_CHECKING:    
+if TYPE_CHECKING:
     from app.models.routine import CoachProfile, Goal, Habit, RoutineItem
     from app.models.ai import ChatMessage, Feedback
+
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
@@ -78,6 +80,12 @@ class User(Base, TimestampMixin):
         nullable=False,
     )
 
+    has_password: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
     pending_deletion: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -89,7 +97,7 @@ class User(Base, TimestampMixin):
         nullable=True,
     )
 
-    credentials: Mapped["UserCredential"] = relationship(
+    credentials: Mapped[Optional["UserCredential"]] = relationship(
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
@@ -136,6 +144,17 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+    external_identities: Mapped[list["ExternalIdentity"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    login_challenges: Mapped[list["LoginChallenge"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
 class UserCredential(Base, TimestampMixin):
     __tablename__ = "user_credentials"
 
@@ -177,6 +196,7 @@ class UserCredential(Base, TimestampMixin):
         back_populates="credentials",
     )
 
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
@@ -216,6 +236,7 @@ class RefreshToken(Base):
         nullable=False,
     )
 
+
 class UserPreference(Base, TimestampMixin):
     __tablename__ = "user_preferences"
 
@@ -252,6 +273,7 @@ class UserPreference(Base, TimestampMixin):
     user: Mapped["User"] = relationship(
         back_populates="preferences",
     )
+
 
 class AuthActionToken(Base):
     __tablename__ = "auth_action_tokens"
@@ -299,3 +321,58 @@ class AuthActionToken(Base):
     user: Mapped["User"] = relationship(
         back_populates="auth_action_tokens",
     )
+
+
+class ExternalIdentity(Base, TimestampMixin):
+    __tablename__ = "external_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "subject", name="uq_external_identity_provider_subject"
+        ),
+        UniqueConstraint(
+            "user_id", "provider", name="uq_external_identity_user_provider"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="external_identities")
+
+
+class LoginChallenge(Base):
+    __tablename__ = "login_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    challenge_type: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
+    secret_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[Optional["User"]] = relationship(back_populates="login_challenges")

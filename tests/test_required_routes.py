@@ -470,7 +470,15 @@ async def test_account_deletion_revokes_tokens_and_blocks_old_access(client, ses
     assert login.status_code == 401
 
 
-async def test_reset_password_revokes_sessions_and_consumes_link(client, session):
+async def test_reset_password_revokes_sessions_and_consumes_link(
+    client, session, monkeypatch
+):
+    async def accept_login_code(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.auth_service.send_login_code_email", accept_login_code
+    )
     user = await create_user(session)
     _, first_refresh = await create_tokens_for_user(session, user)
     _, second_refresh = await create_tokens_for_user(session, user)
@@ -540,8 +548,14 @@ async def test_new_auth_link_invalidates_previous_link(session):
 
 
 async def test_change_password_requires_current_password_and_revokes_sessions(
-    client, session
+    client, session, monkeypatch
 ):
+    async def accept_login_code(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.auth_service.send_login_code_email", accept_login_code
+    )
     user = await create_user(session)
     _, refresh_token = await create_tokens_for_user(session, user)
 
