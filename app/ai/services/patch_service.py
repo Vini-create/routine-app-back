@@ -16,6 +16,7 @@ from app.ai.repositories.persistence_repository import (
 )
 from app.models.ai import (
     AIGraphCheckpoint,
+    AIMessage,
     AIPatchAudit,
     AIProposedPatch,
 )
@@ -284,6 +285,11 @@ async def _owned_patch_for_update(
     if patch.status == "pending" and patch.expires_at <= now:
         patch.status = "expired"
         session.add(patch)
+        await _sync_assistant_patch_message(
+            session,
+            patch=patch,
+            status="expired",
+        )
         await session.commit()
         raise AIApplicationError(
             AIErrorCode.PATCH_EXPIRED,
@@ -308,6 +314,35 @@ def _public_patch(patch: AIProposedPatch) -> ProposedPatch:
     )
 
 
+async def _sync_assistant_patch_message(
+    session: AsyncSession,
+    *,
+    patch: AIProposedPatch,
+    status: str,
+    refresh_proposed_patch: bool = False,
+) -> None:
+    """Keep the owned assistant artifact aligned with its persisted patch."""
+
+    message = await session.scalar(
+        select(AIMessage)
+        .where(
+            AIMessage.request_id == patch.request_id,
+            AIMessage.conversation_id == patch.conversation_id,
+            AIMessage.user_id == patch.user_id,
+            AIMessage.role == "assistant",
+        )
+        .with_for_update()
+    )
+    if message is None:
+        # Patches created before unified message persistence remain resolvable.
+        return
+    message.patch_status = status
+    message.requires_confirmation = status == "pending"
+    if refresh_proposed_patch:
+        message.proposed_patch = _public_patch(patch).model_dump(mode="json")
+    session.add(message)
+
+
 async def accept_patch(
     session: AsyncSession,
     *,
@@ -330,6 +365,11 @@ async def accept_patch(
                     )
                 )
                 if audit is not None:
+                    await _sync_assistant_patch_message(
+                        session,
+                        patch=patch,
+                        status="applied",
+                    )
                     await session.commit()
                     return patch, audit
             raise AIApplicationError(
@@ -354,6 +394,11 @@ async def accept_patch(
         patch.status = "applied"
         patch.applied_at = current
         patch.resolution_idempotency_key = idempotency_key
+        await _sync_assistant_patch_message(
+            session,
+            patch=patch,
+            status="applied",
+        )
         audit = AIPatchAudit(
             patch_id=patch.id,
             user_id=user_id,
@@ -412,6 +457,11 @@ async def reject_patch(
             )
         patch.status = "rejected"
         patch.rejected_at = current
+        await _sync_assistant_patch_message(
+            session,
+            patch=patch,
+            status="rejected",
+        )
         audit = AIPatchAudit(
             patch_id=patch.id,
             user_id=user_id,
@@ -469,6 +519,12 @@ async def edit_patch(
         ]
         if patch.resolution_idempotency_key == idempotency_key:
             if patch.operations == serialized_operations:
+                await _sync_assistant_patch_message(
+                    session,
+                    patch=patch,
+                    status="pending",
+                    refresh_proposed_patch=True,
+                )
                 await session.commit()
                 return patch
             raise AIApplicationError(
@@ -486,6 +542,12 @@ async def edit_patch(
         patch.operations = serialized_operations
         patch.simulation = simulation.public()
         patch.resolution_idempotency_key = idempotency_key
+        await _sync_assistant_patch_message(
+            session,
+            patch=patch,
+            status="pending",
+            refresh_proposed_patch=True,
+        )
         session.add_all(
             [
                 patch,

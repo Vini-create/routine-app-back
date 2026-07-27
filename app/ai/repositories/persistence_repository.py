@@ -152,6 +152,11 @@ async def save_message(
     request_id: UUID,
     route: str | None = None,
     detected_language: str | None = None,
+    analysis: dict | None = None,
+    references: list[dict] | None = None,
+    proposed_patch: dict | None = None,
+    requires_confirmation: bool | None = None,
+    patch_status: str | None = None,
 ) -> AIMessage:
     message = AIMessage(
         conversation_id=conversation_id,
@@ -161,6 +166,11 @@ async def save_message(
         request_id=request_id,
         route=route,
         detected_language=detected_language,
+        analysis=analysis,
+        references=references,
+        proposed_patch=proposed_patch,
+        requires_confirmation=requires_confirmation,
+        patch_status=patch_status,
     )
     session.add(message)
     await session.flush()

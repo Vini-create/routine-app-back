@@ -365,6 +365,11 @@ async def get_ai_conversation(
                     "role": message.role,
                     "content": message.content,
                     "route": message.route,
+                    "analysis": message.analysis,
+                    "references": message.references,
+                    "proposed_patch": message.proposed_patch,
+                    "requires_confirmation": message.requires_confirmation,
+                    "patch_status": message.patch_status,
                     "request_id": message.request_id,
                     "created_at": message.created_at,
                 }

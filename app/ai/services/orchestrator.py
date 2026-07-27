@@ -288,6 +288,15 @@ class AIOrchestrator:
                 request_id=request_id,
                 route=route.value,
                 detected_language=result.get("response_language"),
+                analysis=_json_safe(final.get("analysis")),
+                references=_json_safe(final.get("references", [])),
+                proposed_patch=_json_safe(final.get("proposed_patch")),
+                requires_confirmation=bool(
+                    final.get("requires_confirmation", False)
+                ),
+                patch_status=(
+                    "pending" if final.get("proposed_patch") is not None else None
+                ),
             )
             updated_summary = normalize_conversation_summary(
                 result.get("summary_update")

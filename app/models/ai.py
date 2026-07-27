@@ -196,7 +196,7 @@ class AIConversation(Base):
 
 
 class AIMessage(Base):
-    """Persisted input/output with an idempotent request boundary."""
+    """Persisted input/output and public artifacts for one request boundary."""
 
     __tablename__ = "ai_messages"
 
@@ -219,6 +219,13 @@ class AIMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     detected_language: Mapped[str | None] = mapped_column(String(20), nullable=True)
     route: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    references: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+    proposed_patch: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    requires_confirmation: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    patch_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     request_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), index=True, nullable=False
     )
@@ -233,6 +240,11 @@ class AIMessage(Base):
         CheckConstraint(
             "role IN ('user', 'assistant', 'system')",
             name="ck_ai_messages_role",
+        ),
+        CheckConstraint(
+            "patch_status IS NULL OR "
+            "patch_status IN ('pending', 'applied', 'rejected', 'expired')",
+            name="ck_ai_messages_patch_status",
         ),
         Index(
             "ix_ai_messages_conversation_created",

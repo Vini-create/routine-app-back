@@ -1,6 +1,6 @@
 # Winperium — Contrato de integração do frontend com Alfred
 
-**Atualizado em:** 26 de julho de 2026  
+**Atualizado em:** 27 de julho de 2026
 **Backend:** FastAPI + LangGraph  
 **Prefixo público:** `/api/v1/ai`  
 **Objetivo:** orientar a migração completa do frontend para o novo fluxo
@@ -331,6 +331,11 @@ export interface AIMessage {
   role: "user" | "assistant" | "system";
   content: string;
   route: InternalRoute | null;
+  analysis: AnalysisReport | null;
+  references: EvidenceReference[] | null;
+  proposed_patch: ProposedPatch | null;
+  requires_confirmation: boolean | null;
+  patch_status: PatchStatus | null;
   request_id: UUID;
   created_at: ISODateTime;
 }
@@ -839,6 +844,9 @@ GET /api/v1/ai/conversations/{conversation_id}
 ```
 
 Retorna metadados e até as 100 mensagens mais recentes em ordem cronológica.
+Os artefatos estruturados de `/invoke` e `/stream` são persistidos na mensagem
+`assistant` associada ao mesmo `request_id`. Portanto, o detalhe da conversa é
+a fonte de verdade também após refresh, troca de tela ou nova sessão.
 
 ```json
 {
@@ -853,20 +861,80 @@ Retorna metadados e até as 100 mensagens mais recentes em ordem cronológica.
       "role": "user",
       "content": "Como posso organizar a semana?",
       "route": "alfred",
+      "analysis": null,
+      "references": null,
+      "proposed_patch": null,
+      "requires_confirmation": null,
+      "patch_status": null,
       "request_id": "uuid",
       "created_at": "2026-07-26T12:01:00Z"
     },
     {
       "id": "uuid",
       "role": "assistant",
-      "content": "Vamos começar pelas prioridades.",
-      "route": "alfred",
+      "content": "Encontrei uma oportunidade de ajuste.",
+      "route": "feedbacker",
+      "analysis": {
+        "diagnosis": {
+          "summary": "A execução caiu nos dias de maior carga.",
+          "data_window": "últimos 30 dias",
+          "data_quality": 0.9,
+          "observed_facts": ["Queda de conclusão às quartas-feiras."]
+        },
+        "patterns": [],
+        "hypotheses": [],
+        "recommendations": [],
+        "success_metrics": [],
+        "metadata": {}
+      },
+      "references": [],
+      "proposed_patch": {
+        "patch_id": "uuid",
+        "entity_type": "routine_item",
+        "entity_id": "uuid",
+        "operations": [
+          {
+            "op": "replace",
+            "path": "/duration_minutes",
+            "value": 45
+          }
+        ],
+        "reason": "Adequar a carga ao tempo disponível.",
+        "simulation": {
+          "status": "validated",
+          "before": {"duration_minutes": 60},
+          "after": {"duration_minutes": 45},
+          "changed_fields": ["duration_minutes"]
+        },
+        "success_metrics": []
+      },
+      "requires_confirmation": true,
+      "patch_status": "pending",
       "request_id": "uuid",
       "created_at": "2026-07-26T12:01:05Z"
     }
   ]
 }
 ```
+
+Os cinco campos de artefato são nullable por compatibilidade:
+
+- mensagens antigas e mensagens `user`/`system` normalmente retornam `null`;
+- uma resposta nova sem referências pode retornar `references=[]`;
+- `patch_status=null` significa que a mensagem não possui patch persistido;
+- `patch_status=pending` exige confirmação e
+  `requires_confirmation=true`;
+- `applied`, `rejected` e `expired` são estados finais e retornam
+  `requires_confirmation=false`.
+
+Não condicione esses campos a uma habilidade específica. O mesmo contrato vale
+para `auto`, `analisar_progresso`, `consultar_conhecimento`,
+`reorganizar_rotina`, `criar_plano` e `conversar`, qualquer que tenha sido a
+rota interna escolhida pelo backend.
+
+Ao editar um patch, o histórico passa a devolver as novas `operations` e a nova
+`simulation`, ainda com `patch_status=pending`. Ao aceitar, rejeitar ou expirar,
+o `patch_status` da mesma mensagem `assistant/request_id` é atualizado.
 
 ## Excluir
 
@@ -892,7 +960,8 @@ Ao trocar de conversa:
 1. cancelar stream ativo;
 2. limpar estado transitório de patch/análise/referências;
 3. buscar detalhes;
-4. substituir mensagens;
+4. substituir mensagens e reconstruir analysis/references/patch pelos campos
+   de cada mensagem `assistant`;
 5. definir `conversation_id`;
 6. permitir novo envio.
 
@@ -1245,6 +1314,11 @@ Se o request falhar antes de ser aceito:
 Use o backend como fonte de verdade. Mensagens otimistas podem ser conciliadas
 por `request_id` após recarregar os detalhes.
 
+Não mantenha um cache paralelo definitivo para análise, referências ou patch.
+Após `GET /conversations/{id}`, derive os cards diretamente de cada
+`AIMessage`. Depois de aceitar, editar ou rejeitar, atualize a resposta local e
+recarregue a conversa; isso também cobre expiração decidida pelo backend/job.
+
 ---
 
 # 15. Segurança e privacidade no frontend
@@ -1411,8 +1485,11 @@ A migração está concluída quando:
 - [ ] todas as variantes SSE são tratadas;
 - [ ] usage e capabilities vêm do backend;
 - [ ] conversas podem ser criadas, listadas, abertas e excluídas;
+- [ ] analysis, references e proposed_patch reaparecem após recarregar;
+- [ ] mensagens antigas com artefatos `null` continuam renderizando;
 - [ ] patches exigem confirmação explícita;
 - [ ] edição de patch não é tratada como aceite;
+- [ ] status `pending/applied/rejected/expired` é restaurado pelo histórico;
 - [ ] idempotência é preservada em retry;
 - [ ] erros usam `code` e `request_id`;
 - [ ] nenhuma mensagem pessoal é enviada à observabilidade;
@@ -1441,7 +1518,7 @@ Fonte de verdade:
 
 ```text
 Requests/responses → schemas Pydantic do backend
-Conversa           → endpoints /conversations
+Conversa/artefatos → endpoints /conversations
 Quota              → endpoint /usage
 Funcionalidades    → endpoint /capabilities
 Mutação            → endpoints /patches com confirmação

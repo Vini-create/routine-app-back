@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -117,6 +117,30 @@ async def purge_expired_ai_data(
             AIMemory.expires_at <= current,
         ),
         AIMemory.id,
+    )
+
+    expiring_request_ids = select(AIProposedPatch.request_id).where(
+        AIProposedPatch.status == "pending",
+        AIProposedPatch.expires_at <= current,
+    )
+    await session.execute(
+        update(AIMessage)
+        .where(
+            AIMessage.role == "assistant",
+            AIMessage.request_id.in_(expiring_request_ids),
+        )
+        .values(
+            patch_status="expired",
+            requires_confirmation=False,
+        )
+    )
+    await session.execute(
+        update(AIProposedPatch)
+        .where(
+            AIProposedPatch.status == "pending",
+            AIProposedPatch.expires_at <= current,
+        )
+        .values(status="expired")
     )
 
     message_cutoff = current - timedelta(days=selected_policy.message_days)

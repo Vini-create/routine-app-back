@@ -91,6 +91,16 @@ class AIMessageResponse(AISchema):
     role: Literal["user", "assistant", "system"]
     content: str
     route: InternalRoute | None = None
+    analysis: AnalysisReport | None = None
+    references: list[EvidenceReference] | None = Field(
+        default=None,
+        max_length=12,
+    )
+    proposed_patch: ProposedPatch | None = None
+    requires_confirmation: bool | None = None
+    patch_status: Literal["pending", "applied", "rejected", "expired"] | None = (
+        None
+    )
     request_id: UUID
     created_at: datetime
 
