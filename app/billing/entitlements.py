@@ -27,7 +27,7 @@ class PlanEntitlements:
 PLAN_ENTITLEMENTS: Mapping[PlanCode, PlanEntitlements] = MappingProxyType(
     {
         PlanCode.FREE: PlanEntitlements(
-            requests_per_minute=6,
+            requests_per_minute=15,
             ai_units_per_day=None,
             standard_requests_per_day=30,
             rag_requests_per_day=15,

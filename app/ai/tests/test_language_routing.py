@@ -49,6 +49,26 @@ def test_language_neutral_short_inputs_do_not_override_preference(message: str) 
 
 
 @pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Olá", "pt-BR"),
+        ("Hello", "en"),
+        ("Hola", "es"),
+        ("Bonjour", "fr"),
+    ],
+)
+def test_explicit_short_greetings_do_not_receive_an_ambiguous_language_guess(
+    message: str,
+    expected: str,
+) -> None:
+    result = detect_language(message)
+
+    assert result.language == expected
+    assert result.reliable is True
+    assert result.source == "explicit_short_input"
+
+
+@pytest.mark.parametrize(
     ("message", "skill", "expected_route"),
     [
         (

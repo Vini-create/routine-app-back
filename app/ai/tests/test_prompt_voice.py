@@ -28,6 +28,10 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
     assert "Never replace a simple greeting" in alfred_prompt
     assert "do not recommend sleep" in alfred_prompt
 
+    feedbacker_prompt = " ".join(build_feedbacker_system_prompt("pt-BR").split())
+    assert "every user-visible textual field in the requested response language" in feedbacker_prompt
+    assert "`updated_summary_en` is the sole English-only field" in feedbacker_prompt
+
 
 def test_router_remains_small_and_never_writes_user_facing_prose() -> None:
     prompt = build_routing_system_prompt()

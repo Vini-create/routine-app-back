@@ -48,7 +48,9 @@ from app.db.db import get_session
 from app.models.auth import User
 from app.models.ai import AIConversation
 
-AI_INFERENCE_RATE_LIMIT = "12/minute"
+# Coarse per-IP abuse protection. Per-plan limits are enforced transactionally
+# in usage_service, so this guard must stay above the highest paid-plan limit.
+AI_INFERENCE_RATE_LIMIT = "90/minute"
 AI_READ_RATE_LIMIT = "60/minute"
 AI_WRITE_RATE_LIMIT = "20/minute"
 

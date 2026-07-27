@@ -5661,3 +5661,40 @@ o fluxo SSE.
 O intervalo é de 18 ms: visível como digitação, sem estender excessivamente
 uma resposta curta. O teste `tests/test_ai_streaming.py` garante que os chunks
 reconstroem exatamente a mensagem original.
+
+## 8. Idioma e transparência dos limites
+
+O idioma da resposta não pode depender de um palpite estatístico fraco. Por
+exemplo, o detector local atribuía `"Olá"` ao espanhol com confiança de 0,5097,
+embora tivesse marcado o resultado como não confiável. Para corrigir isso,
+saudações curtas explícitas são resolvidas antes do detector estatístico:
+
+```python
+_EXPLICIT_SHORT_INPUT_LANGUAGES = {"olá": "pt-BR", "hello": "en"}
+```
+
+Se a identificação geral não for confiável, ela retorna `"und"`. Os nodes de
+contexto então usam a preferência salva no perfil como idioma de resposta. Isso
+evita que uma palavra curta altere a língua escolhida pelo usuário.
+
+Os limites do plano Free são independentes, e não um custo ponderado oculto:
+
+| Tipo | Limite | Rotas |
+| --- | ---: | --- |
+| Conversa/dado simples | 30 por dia | `alfred`, `deterministic` |
+| Consulta com referências | 15 por dia | `rag_then_alfred`, `rag_then_feedbacker` |
+| Análise profunda | 3 por semana | `feedbacker`, `rag_then_feedbacker` |
+| Proteção de rajada | 15 por minuto | qualquer rota de IA |
+
+No frontend, cada código de erro agora tem uma explicação própria. Assim,
+`rate_limit_exceeded` informa que é necessário aguardar um minuto — e deixa
+claro que a quota diária não foi consumida — enquanto os códigos de RAG e de
+análise profunda mostram qual categoria atingiu o limite.
+
+Os cards de análise têm duas camadas de localização. Os rótulos e leituras dos
+padrões usam chaves técnicas estáveis (`trend:completion_rate`, por exemplo),
+que o frontend converte para o idioma ativo. Já o diagnóstico determinístico e
+os campos textuais gerados pelo Feedbacker usam `response_language`; o prompt
+exige que hipóteses, recomendações e nomes das métricas de sucesso também sejam
+entregues nesse idioma. A exceção intencional é `updated_summary_en`, memória
+interna que nunca é exibida ao usuário.

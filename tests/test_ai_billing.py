@@ -98,7 +98,7 @@ async def test_free_entitlements_are_portfolio_friendly_and_immutable() -> None:
     free = get_plan_entitlements(PlanCode.FREE)
 
     assert free == PlanEntitlements(
-        requests_per_minute=6,
+        requests_per_minute=15,
         ai_units_per_day=None,
         standard_requests_per_day=30,
         rag_requests_per_day=15,
@@ -419,7 +419,7 @@ async def test_paid_plans_keep_the_weighted_daily_unit_ceiling(session) -> None:
 async def test_per_minute_limit_counts_zero_unit_routes(session) -> None:
     user, _account = await create_billed_user(session)
 
-    for index in range(6):
+    for index in range(15):
         current = BASE_TIME + timedelta(seconds=index)
         reservation = await reserve(
             session,
@@ -439,7 +439,7 @@ async def test_per_minute_limit_counts_zero_unit_routes(session) -> None:
             session,
             user,
             InternalRoute.DETERMINISTIC,
-            now=BASE_TIME + timedelta(seconds=10),
+            now=BASE_TIME + timedelta(seconds=20),
         )
     assert exceeded.value.code is AIErrorCode.RATE_LIMIT_EXCEEDED
 
@@ -581,7 +581,7 @@ async def test_usage_snapshot_resets_at_users_local_midnight(session) -> None:
     assert snapshot.deep_analyses_this_week.used == 1
     assert snapshot.deep_analyses_this_week.limit == 3
     assert snapshot.deep_analyses_this_week.remaining == 2
-    assert snapshot.requests_per_minute == 6
+    assert snapshot.requests_per_minute == 15
     assert snapshot.standard_requests_today.reset_at == datetime(
         2026,
         7,

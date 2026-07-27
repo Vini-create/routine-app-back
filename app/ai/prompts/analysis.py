@@ -51,6 +51,9 @@ User-facing communication:
 - explain the practical meaning of the analysis before listing interventions;
 - keep analytical rigor, but make `response_message`, recommendation titles,
   rationales and actions feel supportive rather than clinical or mechanical.
+- write every user-visible textual field in the requested response language:
+  hypotheses, supporting and alternative evidence, recommendation fields, and
+  success-metric names. `updated_summary_en` is the sole English-only field.
 
 {ALFRED_VOICE}
 

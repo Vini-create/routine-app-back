@@ -15,6 +15,75 @@ from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.analysis import AnalysisSynthesis
 
 
+def _analysis_language(state: AgentState) -> str:
+    return str(state.get("response_language", "en"))
+
+
+def _execution_diagnosis(
+    *,
+    language: str,
+    expected: int,
+    completed: int,
+    completion_rate: Any,
+    window: dict[str, Any],
+    trend_count: int,
+    anomaly_count: int,
+) -> dict[str, Any]:
+    templates = {
+        "pt-BR": {
+            "summary": "{completed} de {expected} ocorrências programadas foram concluídas no período analisado.",
+            "expected": "ocorrências_planejadas={value}",
+            "completed": "ocorrências_concluídas={value}",
+            "rate": "taxa_de_conclusão={value}",
+            "trends": "tendências_detectadas={value}",
+            "anomalies": "anomalias_detectadas={value}",
+        },
+        "es": {
+            "summary": "Se completaron {completed} de {expected} ocurrencias programadas en el período analizado.",
+            "expected": "ocurrencias_programadas={value}",
+            "completed": "ocurrencias_completadas={value}",
+            "rate": "tasa_de_finalización={value}",
+            "trends": "tendencias_detectadas={value}",
+            "anomalies": "anomalías_detectadas={value}",
+        },
+        "fr": {
+            "summary": "{completed} occurrences planifiées sur {expected} ont été réalisées pendant la période analysée.",
+            "expected": "occurrences_planifiées={value}",
+            "completed": "occurrences_réalisées={value}",
+            "rate": "taux_de_réalisation={value}",
+            "trends": "tendances_détectées={value}",
+            "anomalies": "anomalies_détectées={value}",
+        },
+        "en": {
+            "summary": "{completed} of {expected} scheduled occurrences were completed in the analyzed window.",
+            "expected": "scheduled_occurrences={value}",
+            "completed": "completed_occurrences={value}",
+            "rate": "completion_rate={value}",
+            "trends": "detected_trends={value}",
+            "anomalies": "detected_anomalies={value}",
+        },
+    }
+    labels = templates.get(language, templates["en"])
+    return {
+        "summary": str(labels["summary"]).format(
+            completed=completed,
+            expected=expected,
+        ),
+        "data_window": (
+            f"{window.get('start_date', 'unknown')}.."
+            f"{window.get('end_date', 'unknown')}"
+        ),
+        "data_quality": min(1.0, expected / 20),
+        "observed_facts": [
+            str(labels["expected"]).format(value=expected),
+            str(labels["completed"]).format(value=completed),
+            str(labels["rate"]).format(value=completion_rate),
+            str(labels["trends"]).format(value=trend_count),
+            str(labels["anomalies"]).format(value=anomaly_count),
+        ],
+    }
+
+
 async def diagnose_execution_node(state: AgentState) -> dict[str, Any]:
     metrics = state.get("habit_metrics", {})
     summary = metrics.get("summary", {})
@@ -22,30 +91,21 @@ async def diagnose_execution_node(state: AgentState) -> dict[str, Any]:
     completed = int(summary.get("completed_count", 0))
     rate = summary.get("completion_rate")
     window = metrics.get("window", {})
-    observed_facts = [
-        f"expected_occurrences={expected}",
-        f"completed_occurrences={completed}",
-        f"completion_rate={rate}",
-        f"detected_trends={len(state.get('detected_trends', []))}",
-        f"detected_anomalies={len(state.get('detected_anomalies', []))}",
-    ]
+    diagnosis = _execution_diagnosis(
+        language=_analysis_language(state),
+        expected=expected,
+        completed=completed,
+        completion_rate=rate,
+        window=window,
+        trend_count=len(state.get("detected_trends", [])),
+        anomaly_count=len(state.get("detected_anomalies", [])),
+    )
     return traced_update(
         state,
         "diagnosticar_execucao",
         execution_diagnosis=state.get(
             "execution_diagnosis",
-            {
-                "summary": (
-                    f"{completed} of {expected} scheduled occurrences were completed "
-                    "in the analyzed window."
-                ),
-                "data_window": (
-                    f"{window.get('start_date', 'unknown')}.."
-                    f"{window.get('end_date', 'unknown')}"
-                ),
-                "data_quality": min(1.0, expected / 20),
-                "observed_facts": observed_facts,
-            },
+            diagnosis,
         ),
     )
 

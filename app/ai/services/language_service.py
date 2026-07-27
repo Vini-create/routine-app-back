@@ -39,6 +39,21 @@ _LANGUAGE_NEUTRAL_INPUTS = frozenset(
         "❤️",
     }
 )
+# Single-word greetings are too short for statistical language identification:
+# Lingua may classify both ``Olá`` and ``Hello`` as Spanish with low confidence.
+# These are unambiguous product-language signals, so resolve them before the
+# general detector and keep the saved profile as the fallback for other short
+# or inconclusive inputs.
+_EXPLICIT_SHORT_INPUT_LANGUAGES = {
+    "ola": "pt-BR",
+    "olá": "pt-BR",
+    "hello": "en",
+    "hi": "en",
+    "hey": "en",
+    "hola": "es",
+    "bonjour": "fr",
+    "salut": "fr",
+}
 _DISAMBIGUATION_MARKERS = {
     "pt-BR": frozenset(
         {
@@ -90,6 +105,16 @@ def detect_language(value: str) -> LanguageDetection:
     if not normalized or normalized in _LANGUAGE_NEUTRAL_INPUTS:
         return LanguageDetection("und", 0.0, False, "ambiguous_short_input")
 
+    short_input = re.sub(r"[^\w]+", "", normalized)
+    explicit_language = _EXPLICIT_SHORT_INPUT_LANGUAGES.get(short_input)
+    if explicit_language is not None:
+        return LanguageDetection(
+            explicit_language,
+            1.0,
+            True,
+            "explicit_short_input",
+        )
+
     words = set(re.findall(r"[^\W\d_]+", normalized, flags=re.UNICODE))
     marker_scores = {
         language: len(words & markers)
@@ -122,13 +147,11 @@ def detect_language(value: str) -> LanguageDetection:
     confidence = round(float(best.value), 4)
     relative_distance = confidence - float(second_value)
     reliable = confidence >= 0.55 and relative_distance >= 0.12
-    # A low-margin candidate is still preferable for localized safety copy.
-    # ``reliable`` remains false so downstream semantic decisions cannot treat
-    # it as a high-confidence classification.
-    language = (
-        _LINGUA_TO_CODE.get(best.language, "und") if confidence >= 0.35 else "und"
-    )
-    return LanguageDetection(language, confidence, reliable)
+    if not reliable:
+        # Do not let an ambiguous statistical guess override the profile. This
+        # is especially important for one-word inputs such as greetings.
+        return LanguageDetection("und", confidence, False, "ambiguous_lingua")
+    return LanguageDetection(_LINGUA_TO_CODE.get(best.language, "und"), confidence, True)
 
 
 def normalize_language_code(value: str | None) -> str | None:
