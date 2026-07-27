@@ -5698,3 +5698,24 @@ os campos textuais gerados pelo Feedbacker usam `response_language`; o prompt
 exige que hipóteses, recomendações e nomes das métricas de sucesso também sejam
 entregues nesse idioma. A exceção intencional é `updated_summary_en`, memória
 interna que nunca é exibida ao usuário.
+
+## 9. Matriz de habilidades públicas
+
+O menu do frontend expõe seis valores de `selected_skill`. O teste de
+integração `tests/test_ai_skill_matrix.py` exercita cada valor por
+`POST /api/v1/ai/invoke`, verifica a rota resultante e recarrega o histórico
+para confirmar a persistência da resposta:
+
+| Habilidade do menu | Rota validada |
+| --- | --- |
+| `auto` | `deterministic` para uma pergunta de dados simples |
+| `conversar` | `alfred` |
+| `analisar_progresso` | `feedbacker` |
+| `reorganizar_rotina` | `feedbacker` |
+| `criar_plano` | `feedbacker` |
+| `consultar_conhecimento` | `rag_then_alfred` |
+
+O teste substitui o grafo e o recuperador por implementações determinísticas:
+isso comprova o contrato público, quotas, roteamento e persistência sem chamar
+modelos pagos. O pipeline real de recuperação tem testes próprios em
+`app/ai/tests/test_retrieval_pipeline.py`.
