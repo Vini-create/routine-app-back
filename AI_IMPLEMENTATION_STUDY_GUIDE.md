@@ -2910,7 +2910,7 @@ app/ai/prompts/
 Todos compartilham:
 
 ```python
-PROMPT_VERSION = "2026-07-26.v1"
+PROMPT_VERSION = "2026-07-27.v2"
 ```
 
 O prefixo estável facilita avaliação e cache futuro. Os prompts seguem a
@@ -4909,6 +4909,136 @@ Resultado final:
 ```text
 pytest completo → 285 passed
 warnings        → 40 avisos conhecidos do SlowAPI no Python 3.14
+```
+
+---
+
+# Ajuste de voz — Alfred mais simpático sem perder objetividade
+
+**Data:** 27 de julho de 2026
+
+**Status:** concluído
+
+## 1. Problema observado
+
+Modelos pequenos e eficientes, como o `gpt-4o-mini`, tendem a cumprir
+instruções de concisão de forma bastante literal. Um prompt que pede apenas:
+
+```text
+Warm, direct, practical, and respectful.
+```
+
+pode produzir uma resposta correta, porém seca: ela entrega o fato e encerra
+sem criar sensação de conversa.
+
+O ajuste não foi feito em `temperature`. A temperatura altera variabilidade,
+mas não é uma forma confiável de definir personalidade. Voz, relação com o
+usuário e limites de estilo pertencem ao system prompt.
+
+## 2. Voz compartilhada
+
+Foi criado `ALFRED_VOICE` em:
+
+```text
+app/ai/prompts/base.py
+```
+
+Esse bloco é compartilhado por:
+
+```text
+Alfred conversacional
+Feedbacker analítico
+Critic
+```
+
+As regras principais são:
+
+```text
+- soar como um companheiro gentil, atento e capaz;
+- reconhecer brevemente a situação específica quando isso ajudar;
+- responder com clareza e depois oferecer um próximo passo útil;
+- usar linguagem colaborativa em vez de ordens;
+- separar a pessoa do resultado ao falar de falhas;
+- reconhecer progresso somente quando houver evidência;
+- não usar elogio genérico, empatia roteirizada ou animação forçada;
+- manter o calor humano compacto, sem transformar respostas simples em discursos.
+```
+
+O objetivo é uma estrutura parecida com:
+
+```text
+reconhecimento específico curto
+→ resposta clara
+→ próximo passo útil
+```
+
+Isso é diferente de simplesmente adicionar frases como “entendo você” a todas
+as respostas. Repetir validação automática faria Alfred parecer um chatbot
+roteirizado e poderia minimizar problemas reais.
+
+## 3. Responsabilidade de cada modelo
+
+O prompt conversacional aplica a voz a `message` e `next_steps`.
+
+O Feedbacker mantém rigor analítico, mas agora deve:
+
+```text
+- apresentar hipóteses como possibilidades;
+- explicar o significado prático antes das intervenções;
+- comunicar resultados difíceis sem culpa ou julgamento;
+- escrever recomendações de forma acolhedora, não clínica.
+```
+
+O Critic passou a verificar voz além de segurança e factualidade. Se uma
+resposta estiver correta, mas abrupta, mecânica ou paternalista, ele pode
+rejeitar o texto e corrigir apenas a prosa apresentada ao usuário. IDs,
+métricas, referências e operações de patch continuam imutáveis.
+
+O Router não recebeu `ALFRED_VOICE`. Ele devolve somente um schema de
+classificação e nunca escreve para o usuário. Incluir personalidade nesse
+prompt aumentaria tokens sem alterar a experiência.
+
+## 4. Versionamento e segurança
+
+O novo identificador é:
+
+```python
+PROMPT_VERSION = "2026-07-27.v2"
+```
+
+O bloco `SECURITY_BOUNDARY` continua presente nos três modelos user-facing e no
+Router. Tornar Alfred mais simpático não muda:
+
+```text
+autoridade das instruções
+isolamento entre usuários
+tratamento de contexto não confiável
+limites médicos e de segurança
+necessidade de confirmação humana para patches
+rastreabilidade de evidências
+```
+
+## 5. Contratos automatizados
+
+`app/ai/tests/test_prompt_voice.py` garante que:
+
+```text
+Alfred, Feedbacker e Critic compartilham a mesma voz
+o bloco de segurança permanece nos prompts
+a versão nova aparece em todos
+o Router continua pequeno e não responde ao usuário
+```
+
+O plano interno do node conversacional também mudou de:
+
+```text
+warm_direct_practical
+```
+
+para:
+
+```text
+warm_collaborative_practical
 ```
 
 ---

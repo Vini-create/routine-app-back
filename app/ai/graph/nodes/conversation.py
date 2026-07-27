@@ -42,7 +42,7 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
             "alfred_plan",
             {
                 "objective": "Help the user choose one realistic next action.",
-                "tone": "warm_direct_practical",
+                "tone": "warm_collaborative_practical",
                 "key_points": [
                     f"dropout_risk={risk.get('level', 'unknown')}",
                     f"anomaly_count={len(anomalies)}",
