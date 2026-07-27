@@ -7,5 +7,53 @@ from app.models.auth import (
     UserCredential,
     UserPreference,
 )
-from app.models.routine import CoachProfile, Goal, Habit, HabitLog, RoutineItem, RoutineItemLog
-from app.models.ai import ChatMessage, Feedback
+from app.models.routine import (
+    CoachProfile,
+    Goal,
+    Habit,
+    HabitLog,
+    RoutineItem,
+    RoutineItemLog,
+)
+from app.models.ai import (
+    AIConversation,
+    AIFeedbackerDecisionMemory,
+    AIGraphCheckpoint,
+    AIIntervention,
+    AIMemory,
+    AIMessage,
+    AIPatchAudit,
+    AIProposedPatch,
+    AIUsageEvent,
+    ChatMessage,
+    Feedback,
+)
+from app.billing.models import BillingAccount
+
+__all__ = [
+    "AIUsageEvent",
+    "AIConversation",
+    "AIFeedbackerDecisionMemory",
+    "AIGraphCheckpoint",
+    "AIIntervention",
+    "AIMemory",
+    "AIMessage",
+    "AIPatchAudit",
+    "AIProposedPatch",
+    "AuthActionToken",
+    "BillingAccount",
+    "ChatMessage",
+    "CoachProfile",
+    "ExternalIdentity",
+    "Feedback",
+    "Goal",
+    "Habit",
+    "HabitLog",
+    "LoginChallenge",
+    "RefreshToken",
+    "RoutineItem",
+    "RoutineItemLog",
+    "User",
+    "UserCredential",
+    "UserPreference",
+]

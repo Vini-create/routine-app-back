@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "architecture": "alfred_only_canonical_v1",
+  "counts": {
+    "topics": 9,
+    "knowledge_documents": 28,
+    "playbooks": 17,
+    "active_quotes": 0,
+    "production_documents": 45,
+    "sources": 47,
+    "production_sources": 36,
+    "migration_mapping_rows": 370
+  },
+  "errors": [],
+  "warnings": []
+}

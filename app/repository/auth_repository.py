@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.models.auth import AuthActionToken
 from app.models.auth import User, RefreshToken, UserCredential
@@ -6,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from app.schemas.auth_schemas import AuthActionTokenType
 from app.core.security import hash_password
+from app.billing.repository import build_free_billing_account
 
 
 async def get_user_by_email(session, email: str) -> User | None:
@@ -13,7 +15,7 @@ async def get_user_by_email(session, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def get_user_by_id(session, user_id: str) -> User | None:
+async def get_user_by_id(session, user_id: UUID | str) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
@@ -28,7 +30,12 @@ async def create_user_with_credentials(
         session.add(user)
         await session.flush()
         credential.user_id = user.id
-        session.add(credential)
+        session.add_all(
+            [
+                credential,
+                build_free_billing_account(user.id),
+            ]
+        )
         await session.commit()
         await session.refresh(user)
         await session.refresh(credential)
@@ -97,7 +104,7 @@ async def deactivate_user_and_revoke_tokens(session, user: User) -> User:
 
 
 async def get_user_credentials_by_user_id(
-    session, user_id: str
+    session, user_id: UUID | str
 ) -> UserCredential | None:
     result = await session.execute(
         select(UserCredential).where(UserCredential.user_id == user_id)

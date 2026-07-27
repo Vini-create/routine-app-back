@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "phase": 1,
+  "counts": {
+    "markdown_documents": 182,
+    "registered_documents": 182,
+    "sources": 31,
+    "quotes": 56,
+    "techniques": 40,
+    "evaluation_records": 120,
+    "index_eligible_documents": 0,
+    "active_sources": 0
+  },
+  "errors": [],
+  "warnings": []
+}

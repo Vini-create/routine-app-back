@@ -1,0 +1,23 @@
+topic_id: procrastination
+title: Procrastination
+description: >-
+  Scientific knowledge and situational policies for voluntary postponement,
+  task aversiveness, delayed outcomes, difficulty initiating or continuing
+  work and evaluative standards that block completion.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [planning, motivation, self-regulation]
+retrieval_terms:
+  - procrastination
+  - putting things off
+  - cannot start a task
+  - avoiding work
+  - revising without finishing
+  - fear of making mistakes
+  - task feels unpleasant
+  - immediate relief over future benefit
+  - start and then abandon
+concept_ids: [procrastination-pattern, task-aversiveness, temporal-discounting, evaluative-avoidance]
+playbook_ids: [user-cannot-start, standards-block-completion, user-stops-after-starting]
+quote_file: null

@@ -1,0 +1,20 @@
+topic_id: self-regulation
+title: Self-Regulation
+description: >-
+  Knowledge for describing behavior without moral labels and collecting the
+  minimum observations and feedback needed to support a later decision.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [goals, habits, planning, procrastination]
+retrieval_terms:
+  - observable behavior
+  - behavior instead of labels
+  - self monitoring
+  - what should I track
+  - missing behavior data
+  - use progress data to adjust
+  - sustainable progress
+concept_ids: [observable-behavior, self-monitoring, behavioral-feedback]
+playbook_ids: [user-is-progressing-sustainably]
+quote_file: null

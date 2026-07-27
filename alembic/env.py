@@ -15,7 +15,10 @@ import app.models  # noqa: F401
 # access to the values within the .ini file in use.
 config = context.config
 # ConfigParser treats percent signs in escaped passwords as interpolation.
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url_value.replace("%", "%%"),
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

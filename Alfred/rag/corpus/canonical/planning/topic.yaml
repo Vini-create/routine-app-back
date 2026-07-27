@@ -1,0 +1,23 @@
+topic_id: planning
+title: Planning
+description: >-
+  Knowledge and situational policies for converting intentions into feasible
+  actions and calibrated time estimates under concrete opportunities,
+  constraints and recurring obstacles.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [goals, habits, procrastination, sleep-and-recovery]
+retrieval_terms:
+  - action planning
+  - when to do a task
+  - if then plan
+  - irregular schedule
+  - not enough time
+  - overwhelmed by competing commitments
+  - competing priorities
+  - task takes longer than planned
+  - estimate task duration
+concept_ids: [action-planning, implementation-intentions, time-estimation]
+playbook_ids: [user-has-irregular-schedule, user-reports-insufficient-capacity]
+quote_file: null

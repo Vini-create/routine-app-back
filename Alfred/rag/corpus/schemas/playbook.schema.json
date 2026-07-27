@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Winperium Alfred playbook",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "topic_id", "playbook_id", "title", "document_type", "language", "related_concept_ids", "status", "requires_human_review", "index_in_production", "risk_level", "trigger_phrases", "version", "last_machine_audited_at"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^pb-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "topic_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "playbook_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "title": {"type": "string", "minLength": 3},
+    "document_type": {"const": "playbook"},
+    "language": {"const": "en"},
+    "related_concept_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}},
+    "status": {"enum": ["draft", "machine_audited", "human_reviewed", "deprecated", "archived", "quarantined"]},
+    "requires_human_review": {"type": "boolean"},
+    "index_in_production": {"type": "boolean"},
+    "risk_level": {"enum": ["low", "medium", "high"]},
+    "trigger_phrases": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "string", "minLength": 8}},
+    "version": {"type": "string"},
+    "last_machine_audited_at": {"type": "string", "format": "date"}
+  }
+}

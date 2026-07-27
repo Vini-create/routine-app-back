@@ -1,0 +1,20 @@
+topic_id: sleep-and-recovery
+title: Sleep and Recovery
+description: >-
+  Population-level sleep-duration and timing-regularity guidance plus a
+  situational policy for noncritical tiredness after the Security Gate.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [planning, physical-activity, study-and-learning]
+retrieval_terms:
+  - how much sleep
+  - sleeping too little
+  - tired and low energy
+  - adult sleep duration
+  - recovery and routine
+  - inconsistent sleep schedule
+  - weekday and weekend sleep timing
+concept_ids: [sleep-duration, sleep-regularity]
+playbook_ids: [user-reports-tiredness]
+quote_file: null

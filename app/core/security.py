@@ -29,7 +29,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         )
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key, algorithm=settings.algorithm
+        to_encode,
+        settings.secret_key_value,
+        algorithm=settings.algorithm,
     )
     return encoded_jwt
 
@@ -46,7 +48,11 @@ def hash_token(token: str) -> str:
 
 def hash_login_secret(challenge_id: str, secret: str) -> str:
     value = f"{challenge_id}:{secret}".encode()
-    return hmac.new(settings.secret_key.encode(), value, hashlib.sha256).hexdigest()
+    return hmac.new(
+        settings.secret_key_value.encode(),
+        value,
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def verify_login_secret(challenge_id: str, secret: str, expected_hash: str) -> bool:
@@ -63,7 +69,9 @@ def create_numeric_code(length: int = 6) -> str:
 def get_user_id_from_token(token: str, expected_type: str = "access"):
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
+            token,
+            settings.secret_key_value,
+            algorithms=[settings.algorithm],
         )
         user_id: str = payload.get("sub")
         token_type: str = payload.get("type")

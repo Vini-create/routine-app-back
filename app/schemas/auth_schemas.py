@@ -14,6 +14,7 @@ class Languages(str, Enum):
 class Plans(str, Enum):
     FREE = "free"
     PRO = "pro"
+    PLUS = "plus"
     MAX = "max"
 
 

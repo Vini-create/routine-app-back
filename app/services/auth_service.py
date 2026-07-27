@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 
 from app.core.config import settings
+from app.billing.repository import build_free_billing_account
 
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -241,6 +242,7 @@ async def authenticate_with_google(
             )
             session.add(user)
             await session.flush()
+            session.add(build_free_billing_account(user.id))
         else:
             user.is_verified = True
         session.add(

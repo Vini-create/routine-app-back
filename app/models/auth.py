@@ -25,8 +25,9 @@ from app.models.models import TimestampMixin
 from app.db.db import Base
 
 if TYPE_CHECKING:
+    from app.billing.models import BillingAccount
     from app.models.routine import CoachProfile, Goal, Habit, RoutineItem
-    from app.models.ai import ChatMessage, Feedback
+    from app.models.ai import AIUsageEvent, ChatMessage, Feedback
 
 
 class User(Base, TimestampMixin):
@@ -71,6 +72,7 @@ class User(Base, TimestampMixin):
     signature_plan: Mapped[str] = mapped_column(
         String(30),
         default="free",
+        server_default="free",
         nullable=False,
     )
 
@@ -135,6 +137,17 @@ class User(Base, TimestampMixin):
     )
 
     feedbacks: Mapped[list["Feedback"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    billing_account: Mapped[Optional["BillingAccount"]] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    ai_usage_events: Mapped[list["AIUsageEvent"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )

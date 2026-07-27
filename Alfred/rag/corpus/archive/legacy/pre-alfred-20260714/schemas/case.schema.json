@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Winperium case frontmatter",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["case_id", "agent", "user_message", "observed_facts", "possible_hypotheses", "missing_information", "relevant_knowledge", "relevant_playbooks", "incorrect_retrievals", "risk_assessment", "ideal_behavior", "acceptable_variations", "must_avoid", "decision_key", "risk_level", "status", "requires_human_review", "index_eligible"],
+  "properties": {
+    "case_id": {"type": "string", "pattern": "^case-"},
+    "agent": {"enum": ["alfred", "feedbacker", "safety", "edge_case"]},
+    "relevant_playbooks": {"type": "array"},
+    "risk_level": {"enum": ["low", "medium", "high", "critical"]},
+    "status": {"enum": ["draft", "generated", "research_verified", "machine_audited", "human_reviewed", "deprecated", "quarantined"]},
+    "requires_human_review": {"type": "boolean"},
+    "index_eligible": {"type": "boolean"}
+  }
+}

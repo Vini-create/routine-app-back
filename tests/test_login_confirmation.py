@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import select
 
+from app.billing.models import BillingAccount
 from app.core.config import settings
 from app.core.security import hash_password
 from app.models.auth import ExternalIdentity, User, UserCredential
@@ -114,6 +115,15 @@ async def test_google_login_creates_verified_account_and_rejects_replay(
     ).scalar_one()
     assert identity.provider == "google"
     assert identity.subject == "google-subject-123"
+    billing_account = (
+        await session.execute(
+            select(BillingAccount).where(BillingAccount.user_id == user.id)
+        )
+    ).scalar_one()
+    assert billing_account.plan_code == "free"
+    assert billing_account.subscription_status == "active"
+    assert billing_account.billing_provider == "internal"
+    assert billing_account.provider_customer_id is None
 
     replay = await client.post("/auth/google", json=payload)
     assert replay.status_code == 401

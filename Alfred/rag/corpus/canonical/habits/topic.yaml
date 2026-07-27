@@ -1,0 +1,24 @@
+topic_id: habits
+title: Habits
+description: >-
+  Scientific knowledge about the gradual development of automatic responses
+  through repetition in recurring contexts, environmental conditions, graded
+  progression and recovery after ordinary lapses.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [goals, planning, self-regulation, physical-activity]
+retrieval_terms:
+  - habit formation
+  - automatic behavior
+  - how long habits take
+  - stable context
+  - repeating a routine
+  - environment creates friction
+  - missed several days
+  - too many new habits at once
+  - compensate for missed habit work
+  - increase habit difficulty
+concept_ids: [habit-formation, environmental-cues-and-friction, graded-task-progression, lapse-recovery]
+playbook_ids: [user-missed-several-days, user-created-too-many-habits, user-wants-to-compensate, user-increases-difficulty-too-quickly]
+quote_file: null

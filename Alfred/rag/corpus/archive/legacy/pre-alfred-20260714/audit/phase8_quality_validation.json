@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "validated_through_phase": 8,
+  "machine_audited_units": 75,
+  "quality_scores": 75,
+  "repeated_paragraphs": 0,
+  "quarantine_records": 210,
+  "errors": [],
+  "warnings": []
+}

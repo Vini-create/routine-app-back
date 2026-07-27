@@ -14,7 +14,7 @@ class EmailDeliveryError(RuntimeError):
 
 async def _send_transactional_email(payload: dict) -> None:
     headers = {
-        "api-key": settings.brevo_api_key,
+        "api-key": settings.brevo_api_key_value,
         "content-type": "application/json",
         "accept": "application/json",
     }

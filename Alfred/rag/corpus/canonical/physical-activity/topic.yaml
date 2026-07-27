@@ -1,0 +1,18 @@
+topic_id: physical-activity
+title: Physical Activity
+description: >-
+  Population-level physical-activity guidance for organizing routine without
+  prescribing individualized training or clinical progression.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [habits, planning, sleep-and-recovery]
+retrieval_terms:
+  - physical activity consistency
+  - exercise guidelines
+  - 150 minutes per week
+  - return to activity
+  - organize exercise routine
+concept_ids: [physical-activity-consistency]
+playbook_ids: []
+quote_file: null

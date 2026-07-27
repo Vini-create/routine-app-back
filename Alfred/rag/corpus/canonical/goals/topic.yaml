@@ -1,0 +1,22 @@
+topic_id: goals
+title: Goals
+description: >-
+  Knowledge and decision policies for specifying, calibrating, coordinating
+  and reviewing goals under current conditions.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [motivation, planning, self-regulation]
+retrieval_terms:
+  - review a goal
+  - unrealistic deadline
+  - no progress toward goal
+  - pause a goal
+  - change or abandon a goal
+  - vague goal
+  - conflicting goals
+  - goal is too difficult
+  - process versus outcome goal
+concept_ids: [goal-review, behavior-vs-outcome-goals, goal-specificity, goal-difficulty, goal-conflict]
+playbook_ids: [user-has-vague-goal, user-set-unrealistic-goal, user-has-conflicting-goals]
+quote_file: null

@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 from sqlalchemy import (
@@ -10,6 +9,7 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column,
 )
+
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
@@ -24,4 +24,3 @@ class TimestampMixin:
         onupdate=func.now(),
         nullable=False,
     )
-

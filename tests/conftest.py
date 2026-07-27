@@ -17,6 +17,7 @@ database_url = source_database_url.set(
     database="back_routine_test",
 )
 os.environ["DATABASE_URL"] = database_url.render_as_string(hide_password=False)
+os.environ["APP_ENV"] = "test"
 os.environ["RATE_LIMIT_STORAGE_URI"] = ""
 
 import app.models  # noqa: E402, F401

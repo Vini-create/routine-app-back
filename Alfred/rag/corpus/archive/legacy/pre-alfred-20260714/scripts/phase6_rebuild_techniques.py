@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Reconstrói a coleção de técnicas com origem e evidência explícitas."""
+
+from __future__ import annotations
+
+import json
+import shutil
+from pathlib import Path
+
+
+RAG = Path(__file__).resolve().parents[1]
+ROOT = RAG / "techniques"
+QUARANTINE = RAG / "quarantine" / "phase6_legacy_techniques"
+AUDIT = RAG / "audit" / "phase6_technique_decisions.jsonl"
+QREG = RAG / "quarantine" / "registry.jsonl"
+SCORES = RAG / "DOCUMENT_QUALITY_SCORES.jsonl"
+TODAY = "2026-07-13"
+
+
+RAW = [
+ ("tech-action-planning","Action planning","Planejamento da ação","bcttv1","canonical_framework",["src-bcttv1-2013","src-self-regulation-2020"],"Detalhar desempenho e contexto de uma ação escolhida.","Reduzir ambiguidade entre intenção e oportunidade de execução.",["intenção clara com execução vaga"],["comportamento escolhido","oportunidade real"],["agenda já incompatível","meta não escolhida"],["definir comportamento reconhecível","especificar contexto e início","fixar limite e critério de conclusão","conferir conflito real"],"Depois do café das 8h, responder às duas primeiras questões por até 25 minutos."),
+ ("tech-implementation-intention","Implementation intention","Intenção de implementação se–então","implementation_intentions","meta_analysis",["src-ii-2006","src-intention-behavior-2006"],"Ligar uma situação discriminável a uma resposta previamente escolhida.","Aumentar acessibilidade da pista e prontidão da resposta quando a contingência ocorre.",["obstáculo ou oportunidade recorrente e previsível"],["meta previamente endossada","gatilho observável","resposta disponível"],["gatilho vago","múltiplas contingências","situação de risco"],["selecionar um gatilho frequente","escolher resposta curta","escrever uma frase se–então","avaliar apenas após ocorrências reais"],"Se a reunião ultrapassar 18h30, farei dez cartões no trajeto e não tentarei encaixar a sessão longa."),
+ ("tech-problem-solving","Problem solving","Resolução estruturada de problemas","bcttv1","canonical_framework",["src-bcttv1-2013"],"Analisar fatores que influenciam um comportamento e selecionar estratégia para remover ou contornar uma barreira.","Trocar tentativa genérica por intervenção ligada a uma barreira específica.",["barreira concreta com mais de uma solução possível"],["problema delimitado","controle parcial sobre ao menos uma variável"],["emergência","problema sem margem de ação do usuário"],["descrever problema e contexto","listar causas plausíveis sem escolher por intuição","gerar poucas opções","comparar custo e controle","selecionar uma opção e critério de revisão"],"O laboratório fecha cedo; comparar mudar o dia, usar acesso remoto ou negociar entrega, em vez de apenas reduzir a tarefa."),
+ ("tech-goal-review","Review behavior goal(s)","Revisão de meta comportamental","bcttv1","canonical_framework",["src-bcttv1-2013","src-goal-setting-2017"],"Reconsiderar uma meta comportamental à luz do desempenho e das condições observadas.","Atualizar alvo ou plano quando a comparação revela desajuste.",["ciclo de revisão ou mudança relevante de contexto"],["meta e comportamento definidos","dados mínimos do período"],["reação a um único dia","crise aguda"],["comparar alvo e execução","verificar progresso, custo e contexto","classificar desajuste","manter, alterar, pausar ou abandonar","definir próxima revisão"],"Manter o objetivo do curso, reduzir a frequência de cinco para três sessões e revisar após duas semanas."),
+ ("tech-self-monitoring","Self-monitoring of behavior","Automonitoramento do comportamento","bcttv1","systematic_review",["src-bcttv1-2013","src-self-regulation-2020"],"Estabelecer método para a pessoa registrar o comportamento definido.","Gerar feedback observável para uma decisão posterior.",["decisão depende de frequência, contexto ou tendência desconhecida"],["variável e período definidos","carga aceitável","política de dado ausente"],["rastreamento pode intensificar compulsão","dado não mudará decisão"],["formular pergunta de decisão","escolher uma variável","definir registro mínimo","marcar dado ausente","revisar e encerrar coleta"],"Registrar somente o horário de início da primeira tarefa por cinco dias para testar conflito de agenda."),
+ ("tech-feedback-behavior","Feedback on behavior","Feedback sobre comportamento","bcttv1","systematic_review",["src-bcttv1-2013","src-self-regulation-2020"],"Apresentar dados avaliativos sobre desempenho do comportamento acordado.","Permitir comparação informada sem transformar resultado em julgamento da pessoa.",["há alvo e dados com cobertura suficiente"],["definição do comportamento","período e denominador conhecidos"],["dados incompletos apresentados como zero","comparação moralizante"],["declarar período e cobertura","mostrar observado versus alvo","separar fato de hipótese","apontar dado contrário","ligar recomendação a uma decisão"],"Em 8 dias registrados, a sessão começou no horário em 6; nos dois atrasos houve reunião, então os dados não sustentam falta geral de consistência."),
+ ("tech-graded-tasks","Graded tasks","Tarefas graduadas","bcttv1","canonical_framework",["src-bcttv1-2013"],"Definir tarefas fáceis de executar e aumentar a dificuldade até o comportamento-alvo.","Construir capacidade ou tolerância por progressão observável, não apenas diminuir qualquer tarefa.",["dificuldade atual excede habilidade ou tolerância demonstrada"],["dimensão de dificuldade definida","critério de avanço","alvo final conhecido"],["dor ou risco médico","redução usada para evitar indefinidamente o objetivo"],["escolher uma dimensão de dificuldade","definir primeiro nível executável","estabelecer critério de domínio","aumentar uma dimensão","recuar se o critério falhar"],"Resolver equações de uma etapa com 80% de acerto antes de incluir sistemas de duas equações."),
+ ("tech-prompts-cues","Prompts/cues","Pistas e lembretes","bcttv1","canonical_framework",["src-bcttv1-2013"],"Introduzir estímulo ambiental ou social com a finalidade de provocar o comportamento.","Tornar a oportunidade saliente quando esquecimento é barreira plausível.",["comportamento escolhido é esquecido em contexto previsível"],["pista ocorre perto da oportunidade","ação já é compreendida"],["muitos alarmes ignorados","problema é recusa, habilidade ou falta de tempo"],["identificar oportunidade","selecionar pista próxima","associar uma ação","reduzir pistas concorrentes","remover ou trocar se não funciona"],"Deixar o cartão de exercícios sobre o teclado antes do almoço para sinalizar o bloco das 14h."),
+ ("tech-restructure-environment","Restructuring the physical environment","Reestruturação do ambiente físico","bcttv1","canonical_framework",["src-bcttv1-2013"],"Alterar o ambiente físico para facilitar ou dificultar um comportamento.","Mudar acesso, visibilidade ou passos necessários sem depender apenas de lembrança.",["o ambiente adiciona atrito ou oferece distração recorrente"],["barreira ambiental identificada","mudança reversível e autorizada"],["controle coercitivo de outra pessoa","remoção de recurso necessário ou de segurança"],["mapear sequência física","localizar passo evitável ou estímulo concorrente","fazer uma alteração","observar efeito e custo","reverter se criar novo problema"],"Carregar o livro e o caderno na mochila na noite anterior, eliminando a volta para casa antes da biblioteca."),
+ ("tech-social-support-practical","Social support (practical)","Apoio social prático","bcttv1","canonical_framework",["src-bcttv1-2013"],"Organizar ajuda prática de outra pessoa para executar o comportamento.","Remover barreira logística por cooperação explícita.",["outra pessoa pode fornecer recurso, cuidado, transporte ou divisão de tarefa"],["consentimento","pedido específico","limites combinados"],["dependência emocional","monitoramento coercitivo","risco para quem ajuda"],["nomear barreira prática","identificar ajuda específica","pedir consentimento sem pressão","combinar duração e limite","reavaliar autonomia e custo"],"Pedir ao colega para trocar o turno de terça uma única vez, permitindo a prova, sem torná-lo responsável pelo plano de estudos."),
+ ("tech-retrieval-practice","Retrieval practice","Prática de recuperação","learning_science","meta_analysis",["src-learning-dunlosky-2013","src-retrieval-meta-2021"],"Tentar produzir conhecimento a partir da memória antes de consultar a resposta, seguido de feedback.","Fortalecer acesso posterior e revelar lacunas que a familiaridade da releitura esconde.",["conteúdo já apresentado precisa ser retido ou aplicado"],["compreensão inicial mínima","resposta correta ou feedback disponível"],["conteúdo ainda não ensinado","teste punitivo sem feedback"],["definir produção esperada","responder sem consulta","comparar com solução","corrigir erro específico","repetir após intervalo"],"Explicar sem notas por que a derivada zera no ponto crítico e depois conferir cada passo."),
+ ("tech-spaced-practice","Distributed practice","Prática distribuída","learning_science","systematic_review",["src-learning-dunlosky-2013","src-spacing-review-2024"],"Distribuir estudo ou recuperação em sessões separadas no tempo.","Criar oportunidades repetidas de reconstrução do conhecimento em vez de concentração única.",["retenção futura importa e há mais de um dia disponível"],["horizonte conhecido","material dividido","compreensão inicial"],["prazo imediato","repetição espaçada de erro não corrigido"],["definir horizonte","dividir unidades","agendar contatos em dias distintos","usar recuperação e feedback","ajustar intervalo pela dificuldade"],"Questões do capítulo hoje, recuperação dos erros na quinta e nova aplicação no simulado da terça seguinte."),
+]
+
+
+def build(row):
+    tid, official, pt, origin, evidence, sources, definition, mechanism, use, pre, contra, steps, example = row
+    return {"technique_id":tid,"official_name":official,"name_pt_br":pt,"technique_origin":origin,"definition":definition,"proposed_mechanism":mechanism,"evidence_level":evidence,"evidence_summary":"A origem e o alcance estão limitados às fontes declaradas; eficácia depende de população, comportamento, contexto e implementação.","supported_claims":[{"claim_id":f"{tid}-definition","source_ids":[sources[0]],"evidence_strength":evidence}],"source_ids":sources,"use_when":use,"preconditions":pre,"contraindications":contra,"implementation_steps":steps,"example":example,"applicable_agents":["alfred","feedbacker"],"status":"machine_audited","requires_human_review":True,"active":False,"version":"2.0.0","last_machine_audited_at":TODAY}
+
+
+def main():
+    if AUDIT.exists() or QUARANTINE.exists(): raise SystemExit("Fase 6 já executada.")
+    old_files=sorted(ROOT.glob("*.jsonl")); old=[]
+    for p in old_files:
+        for n,line in enumerate(p.read_text(encoding="utf-8").splitlines(),1):
+            if line.strip(): old.append((p.name,n,json.loads(line)))
+    QUARANTINE.parent.mkdir(parents=True,exist_ok=True); shutil.move(str(ROOT),str(QUARANTINE)); ROOT.mkdir()
+    new=[build(row) for row in RAW]
+    (ROOT/"core_techniques.jsonl").write_text("".join(json.dumps(r,ensure_ascii=False)+"\n" for r in new),encoding="utf-8")
+    new_ids={r["technique_id"] for r in new}; decisions=[]; qrows=[]
+    for filename,n,row in old:
+        decision="replaced_by_v2" if row["technique_id"] in new_ids else "quarantined_not_a_distinct_or_supported_technique"
+        item={"record_id":row["technique_id"],"original_path":f"techniques/{filename}","original_line":n,"quarantine_path":f"quarantine/phase6_legacy_techniques/{filename}","decision":decision,"phase":6,"active":False,"index_eligible":False,"requires_human_review":True}
+        decisions.append(item); qrows.append(item)
+    for row in new: decisions.append({"record_id":row["technique_id"],"path":"techniques/core_techniques.jsonl","decision":"active_reconstructed_v2","phase":6,"status":"machine_audited","active":False,"requires_human_review":True})
+    AUDIT.write_text("".join(json.dumps(r,ensure_ascii=False)+"\n" for r in decisions),encoding="utf-8")
+    existing=[json.loads(x) for x in QREG.read_text(encoding="utf-8").splitlines() if x]
+    QREG.write_text("".join(json.dumps(r,ensure_ascii=False)+"\n" for r in existing+qrows),encoding="utf-8")
+    scores=[json.loads(x) for x in SCORES.read_text(encoding="utf-8").splitlines() if x]
+    scores += [{"document_id":r["technique_id"],"document_type":"technique","specificity":4,"evidence":4,"traceability":5,"actionability":4,"naturalness":4,"retrieval_value":4,"safety":4,"metadata":5,"status":"machine_audited","requires_human_review":True,"scored_at":TODAY} for r in new]
+    SCORES.write_text("".join(json.dumps(r,ensure_ascii=False)+"\n" for r in scores),encoding="utf-8")
+    print(json.dumps({"status":"ok","legacy_records":len(old),"active_rebuilt":len(new),"quarantined_without_replacement":len(old)-sum(1 for _,_,r in old if r["technique_id"] in new_ids)},ensure_ascii=False))
+
+if __name__=="__main__": main()

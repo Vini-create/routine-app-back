@@ -11,8 +11,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     UniqueConstraint,
-    func,
-
 )
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -28,7 +26,6 @@ from app.db.db import Base
 if TYPE_CHECKING:
     from app.models.auth import User
     from app.models.ai import Feedback
-
 
 
 class CoachProfile(Base, TimestampMixin):
@@ -71,6 +68,7 @@ class CoachProfile(Base, TimestampMixin):
     user: Mapped["User"] = relationship(
         back_populates="coach_profiles",
     )
+
 
 class Goal(Base, TimestampMixin):
     __tablename__ = "goals"
@@ -140,6 +138,7 @@ class Goal(Base, TimestampMixin):
     feedbacks: Mapped[list["Feedback"]] = relationship(
         back_populates="goal",
     )
+
 
 class Habit(Base, TimestampMixin):
     __tablename__ = "habits"
@@ -212,6 +211,7 @@ class Habit(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+
 class HabitLog(Base, TimestampMixin):
     __tablename__ = "habit_logs"
 
@@ -256,6 +256,7 @@ class HabitLog(Base, TimestampMixin):
             name="uq_habit_log_per_day",
         ),
     )
+
 
 class RoutineItem(Base, TimestampMixin):
     __tablename__ = "routine_items"
@@ -344,6 +345,7 @@ class RoutineItem(Base, TimestampMixin):
         back_populates="routine_item",
         cascade="all, delete-orphan",
     )
+
 
 class RoutineItemLog(Base, TimestampMixin):
     __tablename__ = "routine_item_logs"

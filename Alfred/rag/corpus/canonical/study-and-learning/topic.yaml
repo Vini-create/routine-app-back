@@ -1,0 +1,21 @@
+topic_id: study-and-learning
+title: Study and Learning
+description: >-
+  Evidence-based learning concepts for retrieving information from memory and
+  distributing, interleaving and evaluating practice across time.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [planning, self-regulation, sleep-and-recovery]
+retrieval_terms:
+  - retrieval practice
+  - practice testing
+  - spaced practice
+  - distributed learning
+  - remembering what I studied
+  - review schedule
+  - interleaved practice
+  - studying feels easy but I forget
+concept_ids: [retrieval-practice, spaced-practice, interleaved-practice, false-fluency]
+playbook_ids: []
+quote_file: null

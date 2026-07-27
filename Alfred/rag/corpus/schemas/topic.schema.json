@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Winperium canonical topic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["topic_id", "title", "description", "status", "requires_human_review", "language", "related_topics", "retrieval_terms", "concept_ids", "playbook_ids", "quote_file"],
+  "properties": {
+    "topic_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "title": {"type": "string", "minLength": 3},
+    "description": {"type": "string", "minLength": 40},
+    "status": {"enum": ["draft", "machine_audited", "human_reviewed", "deprecated", "archived", "quarantined"]},
+    "requires_human_review": {"type": "boolean"},
+    "language": {"const": "en"},
+    "related_topics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}},
+    "retrieval_terms": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 3}},
+    "concept_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}},
+    "playbook_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}},
+    "quote_file": {"type": ["string", "null"]}
+  }
+}

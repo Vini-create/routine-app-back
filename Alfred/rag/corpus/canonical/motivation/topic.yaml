@@ -1,0 +1,21 @@
+topic_id: motivation
+title: Motivation
+description: >-
+  Knowledge and situational policies about endorsed, internalized or imposed
+  goals, changing motivational states, explicit goal rejection and strategies
+  that depend too heavily on momentary willingness.
+status: machine_audited
+requires_human_review: true
+language: en
+related_topics: [goals, planning, procrastination]
+retrieval_terms:
+  - no motivation
+  - goal feels imposed
+  - doing it for someone else
+  - goal has no meaning
+  - rejecting a suggestion
+  - waiting to feel motivated
+  - motivation changes every day
+concept_ids: [goal-autonomy, motivation-variability]
+playbook_ids: [user-questions-goal, user-rejects-suggestion, user-waits-for-motivation]
+quote_file: null
