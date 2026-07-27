@@ -312,6 +312,57 @@ async def test_ambiguous_request_uses_router_then_alfred_only() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "expected_strategy"),
+    [
+        ("Olá!", "social_greeting"),
+        ("Quem é você?", "identity_and_scope"),
+        (
+            "Você tem informações sobre meus hábitos aí?",
+            "context_transparency",
+        ),
+    ],
+)
+async def test_direct_conversation_never_becomes_unrelated_routine_advice(
+    message: str,
+    expected_strategy: str,
+) -> None:
+    gateway = FakeModelGateway()
+    request_state = state(message)
+    request_state["habits"] = [
+        {
+            "id": "habit-1",
+            "name": "Dormir cedo",
+            "status": "active",
+        }
+    ]
+    request_state["recent_messages"] = [
+        {
+            "role": "assistant",
+            "content": "Tente dormir oito horas.",
+        }
+    ]
+
+    result = await invoke(request_state, gateway)
+
+    assert result["alfred_strategy"] == expected_strategy
+    alfred_prompt = next(
+        prompt
+        for role, prompt in gateway.user_prompts
+        if role is ModelRole.ALFRED
+    )
+    assert f'"selected_strategy":"{expected_strategy}"' in alfred_prompt
+    assert '"behavioral_state":{}' in alfred_prompt
+    assert '"habits":[]' in alfred_prompt
+    assert "Tente dormir oito horas." not in alfred_prompt
+    if expected_strategy == "context_transparency":
+        assert (
+            '"context_inventory":{"goals":0,"habits":1,'
+            '"routine_items":0,"recent_messages":1}'
+        ) in alfred_prompt
+
+
+@pytest.mark.asyncio
 async def test_obvious_deterministic_request_never_calls_a_model() -> None:
     gateway = FakeModelGateway()
     result = await invoke(state("Quantos hábitos ativos eu tenho?"), gateway)

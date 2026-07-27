@@ -1,5 +1,7 @@
 """Alfred conversational capability with one bounded model call."""
 
+import re
+import unicodedata
 from typing import Any
 
 from langgraph.runtime import Runtime
@@ -14,10 +16,57 @@ from app.ai.prompts.alfred import build_alfred_system_prompt
 from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.alfred import AlfredIntervention
 
+_CONTEXT_FREE_STRATEGIES = {
+    "social_greeting",
+    "identity_and_scope",
+    "context_transparency",
+}
+
+
+def _canonical(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", value.casefold())
+    without_accents = "".join(
+        character for character in folded if not unicodedata.combining(character)
+    )
+    return " ".join(without_accents.split())
+
+
+def _direct_conversation_strategy(message: str) -> str | None:
+    canonical = _canonical(message).strip(" .,!?:;")
+    if re.fullmatch(
+        r"(?:oi|ola|e ai|bom dia|boa tarde|boa noite|hello|hi|hey|hola|"
+        r"buenos dias|bonjour|salut)",
+        canonical,
+    ):
+        return "social_greeting"
+    if re.search(
+        r"\b(?:quem e voce|o que voce e|se apresente|what are you|who are you|"
+        r"quien eres|qui es tu|presente-toi)\b",
+        canonical,
+    ):
+        return "identity_and_scope"
+    if (
+        re.search(
+            r"\b(?:voce (?:tem|ve|sabe|acessa)|quais dados|que informacoes|"
+            r"what data|what information|que datos|quelles donnees)\b",
+            canonical,
+        )
+        and re.search(
+            r"\b(?:habitos?|rotina|metas?|dados|informacoes|habits?|routine|"
+            r"goals?|data|datos|rutina|donnees|habitudes?)\b",
+            canonical,
+        )
+    ):
+        return "context_transparency"
+    return None
+
 
 async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
+    direct_strategy = _direct_conversation_strategy(state["original_input"])
     dropout_level = state.get("dropout_risk", {}).get("level")
-    if state.get("evidence_pack"):
+    if direct_strategy is not None:
+        strategy = direct_strategy
+    elif state.get("evidence_pack"):
         strategy = "evidence_based_guidance"
     elif dropout_level == "high":
         strategy = "recovery_and_reduction"
@@ -35,20 +84,47 @@ async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
 async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
     risk = state.get("dropout_risk", {})
     anomalies = state.get("detected_anomalies", [])
+    strategy = state.get("alfred_strategy", "practical_next_step")
+    objectives = {
+        "social_greeting": (
+            "Reply naturally to the greeting and briefly invite the user to "
+            "share what they need."
+        ),
+        "identity_and_scope": (
+            "Explain who Alfred is and what Alfred can help with, without "
+            "inventing access or giving unsolicited routine advice."
+        ),
+        "context_transparency": (
+            "Answer transparently which application data categories are "
+            "available in this request, using context_inventory only."
+        ),
+    }
     return traced_update(
         state,
         "planejar_resposta_alfred",
         alfred_plan=state.get(
             "alfred_plan",
             {
-                "objective": "Help the user choose one realistic next action.",
+                "objective": objectives.get(
+                    strategy,
+                    "Help the user choose one realistic next action.",
+                ),
                 "tone": "warm_collaborative_practical",
                 "key_points": [
+                    f"selected_strategy={strategy}",
                     f"dropout_risk={risk.get('level', 'unknown')}",
                     f"anomaly_count={len(anomalies)}",
                 ],
-                "next_steps": ["prioritize_the_smallest_useful_intervention"],
-                "should_ask_question": not bool(state.get("habits")),
+                "next_steps": (
+                    []
+                    if strategy in _CONTEXT_FREE_STRATEGIES
+                    else ["prioritize_the_smallest_useful_intervention"]
+                ),
+                "should_ask_question": (
+                    False
+                    if strategy in _CONTEXT_FREE_STRATEGIES
+                    else not bool(state.get("habits"))
+                ),
             },
         ),
     )
@@ -65,6 +141,18 @@ async def generate_alfred_intervention_node(
     )
     if gateway is not None:
         try:
+            strategy = state.get("alfred_strategy", "practical_next_step")
+            use_routine_context = strategy not in _CONTEXT_FREE_STRATEGIES
+            context_inventory = (
+                {
+                    "goals": len(state.get("goals", [])),
+                    "habits": len(state.get("habits", [])),
+                    "routine_items": len(state.get("routines", [])),
+                    "recent_messages": len(state.get("recent_messages", [])),
+                }
+                if strategy == "context_transparency"
+                else {}
+            )
             result = await gateway.invoke_structured(
                 role=ModelRole.ALFRED,
                 schema=AlfredIntervention,
@@ -74,18 +162,44 @@ async def generate_alfred_intervention_node(
                 user_prompt=bounded_json(
                     {
                         "USER_INPUT": state["original_input"],
-                        "selected_strategy": state.get("alfred_strategy"),
+                        "selected_strategy": strategy,
                         "response_plan": state.get("alfred_plan", {}),
-                        "behavioral_state": state.get("behavioral_state", {}),
-                        "goals": state.get("goals", [])[:10],
-                        "habits": state.get("habits", [])[:20],
-                        "evidence_pack": state.get("evidence_pack", {}),
+                        "context_inventory": context_inventory,
+                        "behavioral_state": (
+                            state.get("behavioral_state", {})
+                            if use_routine_context
+                            else {}
+                        ),
+                        "goals": (
+                            state.get("goals", [])[:10]
+                            if use_routine_context
+                            else []
+                        ),
+                        "habits": (
+                            state.get("habits", [])[:20]
+                            if use_routine_context
+                            else []
+                        ),
+                        "evidence_pack": (
+                            state.get("evidence_pack", {})
+                            if use_routine_context
+                            else {}
+                        ),
                         "UNTRUSTED_CONTEXT": {
-                            "recent_messages": state.get("recent_messages", [])[-8:],
-                            "memories": state.get("relevant_memories", [])[:10],
-                            "conversation_summary_en": state.get(
-                                "conversation_summary",
-                                "",
+                            "recent_messages": (
+                                state.get("recent_messages", [])[-8:]
+                                if use_routine_context
+                                else []
+                            ),
+                            "memories": (
+                                state.get("relevant_memories", [])[:10]
+                                if use_routine_context
+                                else []
+                            ),
+                            "conversation_summary_en": (
+                                state.get("conversation_summary", "")
+                                if use_routine_context
+                                else ""
                             ),
                         },
                     }

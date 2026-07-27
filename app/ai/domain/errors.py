@@ -5,6 +5,7 @@ from enum import StrEnum
 
 class AIErrorCode(StrEnum):
     INVALID_REQUEST = "invalid_request"
+    IDEMPOTENCY_KEY_REUSED = "idempotency_key_reused"
     CONVERSATION_NOT_FOUND = "conversation_not_found"
     CONVERSATION_FORBIDDEN = "conversation_forbidden"
     USER_CONTEXT_FORBIDDEN = "user_context_forbidden"

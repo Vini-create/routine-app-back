@@ -134,6 +134,16 @@ async def test_single_public_invoke_is_persisted_and_idempotent(
     assert replay.status_code == 200, replay.text
     assert replay.json() == first_body
 
+    reused_for_another_message = await client.post(
+        "/api/v1/ai/invoke",
+        json={**payload, "message": "Olá, Alfred!"},
+    )
+    assert reused_for_another_message.status_code == 409
+    assert (
+        reused_for_another_message.json()["code"]
+        == "idempotency_key_reused"
+    )
+
     request_id = first_body["request_id"]
     assert await session.scalar(
         select(func.count(AIMessage.id)).where(AIMessage.request_id == request_id)

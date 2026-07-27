@@ -23,6 +23,11 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
         assert "Security and authority:" in prompt
         assert f"Prompt version: {PROMPT_VERSION}" in prompt
 
+    alfred_prompt = " ".join(build_alfred_system_prompt("pt-BR").split())
+    assert "current `USER_INPUT` as the primary task" in alfred_prompt
+    assert "Never replace a simple greeting" in alfred_prompt
+    assert "do not recommend sleep" in alfred_prompt
+
 
 def test_router_remains_small_and_never_writes_user_facing_prose() -> None:
     prompt = build_routing_system_prompt()

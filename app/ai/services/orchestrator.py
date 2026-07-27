@@ -1,6 +1,8 @@
 """Production orchestration for the single public Alfred entry point."""
 
 import asyncio
+import hashlib
+import json
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from time import perf_counter
@@ -83,6 +85,48 @@ def _token_usage_seed() -> dict[str, Any]:
     }
 
 
+def _request_fingerprint(payload: AIInvokeRequest) -> str:
+    """Bind one idempotency key to one canonical public request payload."""
+
+    serialized = json.dumps(
+        payload.model_dump(mode="json", exclude={"idempotency_key"}),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _validate_replay_payload(
+    checkpoint: AIGraphCheckpoint,
+    payload: AIInvokeRequest,
+) -> None:
+    stored = checkpoint.state or {}
+    expected_fingerprint = stored.get("idempotency_fingerprint")
+    matches = (
+        expected_fingerprint == _request_fingerprint(payload)
+        if expected_fingerprint is not None
+        else (
+            stored.get("original_input") == payload.message
+            and str(stored.get("selected_skill", "auto"))
+            == payload.selected_skill.value
+            and stored.get("screen_context") == payload.screen_context
+            and (
+                payload.conversation_id is None
+                or stored.get("conversation_id") == str(payload.conversation_id)
+            )
+        )
+    )
+    if not matches:
+        raise AIApplicationError(
+            AIErrorCode.IDEMPOTENCY_KEY_REUSED,
+            (
+                "This idempotency key was already used for a different Alfred "
+                "request. Generate a new key for each new message."
+            ),
+        )
+
+
 class AIOrchestrator:
     """Owns identity, billing, graph execution and durable request boundaries."""
 
@@ -160,6 +204,7 @@ class AIOrchestrator:
             idempotency_key=payload.idempotency_key,
         )
         if replay is not None and replay.response:
+            _validate_replay_payload(replay, payload)
             return AIInvokeResponse.model_validate(replay.response)
 
         # Plan validation intentionally precedes even the cheap router model.
@@ -192,6 +237,7 @@ class AIOrchestrator:
             idempotency_key=(
                 str(payload.idempotency_key) if payload.idempotency_key else None
             ),
+            idempotency_fingerprint=_request_fingerprint(payload),
             token_usage=_token_usage_seed(),
         )
         route = await self._resolve_route(payload, state)
@@ -225,6 +271,7 @@ class AIOrchestrator:
                 request_id=request_id,
             )
             if replay is not None and replay.response:
+                _validate_replay_payload(replay, payload)
                 return AIInvokeResponse.model_validate(replay.response)
             raise AIApplicationError(
                 AIErrorCode.INVALID_REQUEST,

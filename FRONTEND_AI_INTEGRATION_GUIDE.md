@@ -442,6 +442,10 @@ nova mensagem intencional, gere outra.
 Não gere uma nova chave automaticamente antes de saber se a tentativa anterior
 chegou ao backend, pois isso pode duplicar consumo e mensagens.
 
+O backend vincula a chave ao payload canônico. Reutilizá-la com texto,
+conversa, habilidade ou contexto visual diferente retorna `409` com
+`code="idempotency_key_reused"`; não trate esse erro como retry.
+
 ## Response
 
 ```json
@@ -521,7 +525,7 @@ status
 reference   zero ou mais
 analysis    zero ou um
 patch       zero ou um
-token       um ou mais
+token       uma palavra, preservando o espaço que a sucede quando houver
 done        exatamente um em sucesso
 ```
 
@@ -597,7 +601,9 @@ O payload é um `AnalysisReport`.
 ```
 
 Atualmente cada evento contém um grupo de até 12 palavras, não necessariamente
-um token de tokenizer. Ao concatenar, preserve um espaço entre chunks.
+Uma palavra legível (não necessariamente um token do tokenizer). O backend
+preserva a pontuação e os espaços originais; ao concatenar, não remova espaços
+do fim de um chunk nem acrescente um segundo espaço.
 
 ### `done`
 
@@ -1141,6 +1147,7 @@ com `detail`.
 ```ts
 export type AIErrorCode =
   | "invalid_request"
+  | "idempotency_key_reused"
   | "conversation_not_found"
   | "conversation_forbidden"
   | "user_context_forbidden"

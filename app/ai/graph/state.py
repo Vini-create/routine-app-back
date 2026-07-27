@@ -29,6 +29,7 @@ class AgentState(TypedDict):
     # Optional request context
     screen_context: NotRequired[dict[str, Any] | None]
     idempotency_key: NotRequired[str | None]
+    idempotency_fingerprint: NotRequired[str]
 
     # Language and normalization
     detected_language: NotRequired[str]

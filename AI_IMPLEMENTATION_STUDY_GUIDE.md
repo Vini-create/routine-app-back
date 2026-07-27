@@ -4913,6 +4913,58 @@ warnings        → 40 avisos conhecidos do SlowAPI no Python 3.14
 
 ---
 
+# Correção de intenção conversacional e idempotência
+
+**Data:** 27 de julho de 2026
+
+## 1. Sintoma e causa
+
+Em uma conta com baixa taxa de conclusão, perguntas como `Olá` e `Quem é
+você?` recebiam uma intervenção sobre sono. O modelo não estava reutilizando
+uma resposta fixa: o node conversacional priorizava `dropout_risk=high` antes
+da intenção atual e encaminhava contexto comportamental excessivo ao modelo.
+
+O ajuste separa três estratégias de conversa curta:
+
+```text
+social_greeting       → cumprimentos
+identity_and_scope    → quem é Alfred e como ele ajuda
+context_transparency  → quais categorias de dados da aplicação estão disponíveis
+```
+
+Essas estratégias têm prioridade sobre o risco heurístico e recebem somente
+`context_inventory` quando a pergunta é sobre dados. Métricas, hábitos,
+memórias e resumo anterior ficam fora do payload para que uma recomendação de
+rotina antiga não contamine a resposta atual.
+
+O prompt conversacional também declara que `USER_INPUT` é a tarefa primária e
+proíbe recomendações genéricas de sono, exercício ou foco sem pedido do usuário
+ou evidência diretamente relevante.
+
+## 2. Idempotência defensiva
+
+Cada requisição agora produz um SHA-256 do payload público, excluindo somente a
+própria `idempotency_key`. O fingerprint é guardado no checkpoint LangGraph.
+
+```text
+mesma chave + mesmo payload      → replay seguro da resposta
+mesma chave + payload diferente  → 409 idempotency_key_reused
+```
+
+Isso impede que um erro futuro no frontend devolva silenciosamente a resposta
+de uma mensagem anterior.
+
+## 3. Reconciliação no frontend
+
+Após `done` no SSE, a tela busca a conversa persistida e substitui o estado
+otimista pelo histórico do backend. A interface também não marca uma stream sem
+tokens como concluída: ela mostra o erro e preserva o retry com a mesma chave.
+
+O helper `createTurnPayload` centraliza a criação de uma UUID nova para cada
+mensagem intencional; somente o retry reutiliza o payload original.
+
+---
+
 # Ajuste de voz — Alfred mais simpático sem perder objetividade
 
 **Data:** 27 de julho de 2026
@@ -5579,3 +5631,33 @@ mypy focado     → 13 arquivos, nenhum erro
 alembic head    → e4b7c2d91a63
 warnings        → 40 avisos conhecidos do SlowAPI no Python 3.14
 ```
+
+## 7. Streaming incremental da resposta
+
+O grafo produz uma resposta estruturada completa antes de ela poder ser
+validada, persistida e acompanhada dos artefatos (`analysis`, `references` e
+`proposed_patch`). Portanto, o streaming atual é de **apresentação**: ele não
+antecipa a execução do grafo, mas evita que o usuário espere a resposta já
+pronta aparecer inteira de uma vez.
+
+Antes, a rota agrupava doze palavras em cada evento e não fazia `await` dentro
+do loop. Um servidor ou proxy podia, então, entregar todos os frames juntos ao
+navegador. A implementação passa a preservar a formatação da mensagem e ceder
+o event loop entre as palavras:
+
+```python
+for word in _stream_word_chunks(response.message):
+    yield _sse("token", {"content": word})
+    await asyncio.sleep(STREAM_WORD_DELAY_SECONDS)
+```
+
+`_stream_word_chunks` usa `r"\S+\s*"`, por isso `"Olá, Vini!\n"` chega sem
+perder pontuação, quebras de linha ou espaços. O frontend já consome os eventos
+`token` acumulando o texto da bolha em estado React. Os cabeçalhos
+`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no` e
+`Connection: keep-alive` reduzem a chance de buffers intermediários alterarem
+o fluxo SSE.
+
+O intervalo é de 18 ms: visível como digitação, sem estender excessivamente
+uma resposta curta. O teste `tests/test_ai_streaming.py` garante que os chunks
+reconstroem exatamente a mensagem original.

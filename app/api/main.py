@@ -26,6 +26,7 @@ app.add_exception_handler(
 
 
 _AI_ERROR_STATUS = {
+    AIErrorCode.IDEMPOTENCY_KEY_REUSED: 409,
     AIErrorCode.CONVERSATION_NOT_FOUND: 404,
     AIErrorCode.PATCH_NOT_FOUND: 404,
     AIErrorCode.CONVERSATION_FORBIDDEN: 403,

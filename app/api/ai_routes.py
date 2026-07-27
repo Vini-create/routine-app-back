@@ -1,6 +1,8 @@
 """Single public Alfred API; Feedbacker remains an internal graph route."""
 
+import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
 from uuid import UUID
 
@@ -49,6 +51,10 @@ from app.models.ai import AIConversation
 AI_INFERENCE_RATE_LIMIT = "12/minute"
 AI_READ_RATE_LIMIT = "60/minute"
 AI_WRITE_RATE_LIMIT = "20/minute"
+
+# This is deliberately small: it makes each SSE frame observable by the browser
+# without turning a concise Alfred answer into a long typewriter animation.
+STREAM_WORD_DELAY_SECONDS = 0.018
 
 
 async def get_current_ai_billing_access(
@@ -110,6 +116,11 @@ def _sse(event: str, data: object) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
 
+def _stream_word_chunks(message: str) -> list[str]:
+    """Keep the original whitespace while emitting one readable word per frame."""
+    return re.findall(r"\S+\s*", message)
+
+
 @ai_router.post("/stream")
 @limiter.limit(AI_INFERENCE_RATE_LIMIT)
 async def stream_alfred(
@@ -139,11 +150,14 @@ async def stream_alfred(
                         "requires_confirmation": True,
                     },
                 )
-            # Model outputs are structured and validated before exposure. The
-            # transport still chunks the final text for incremental rendering.
-            words = response.message.split()
-            for start in range(0, len(words), 12):
-                yield _sse("token", {"content": " ".join(words[start : start + 12])})
+            # The graph must finish before its structured artifacts can be
+            # validated and persisted.  Once it has, emit one word at a time
+            # and yield to the event loop between frames: without that await,
+            # proxies and browsers commonly coalesce every token into one
+            # response and the frontend cannot render incrementally.
+            for word in _stream_word_chunks(response.message):
+                yield _sse("token", {"content": word})
+                await asyncio.sleep(STREAM_WORD_DELAY_SECONDS)
             yield _sse(
                 "done",
                 {
@@ -167,8 +181,9 @@ async def stream_alfred(
         events(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         },
     )
 
