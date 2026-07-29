@@ -104,8 +104,19 @@ def _retrieval_topics(state: AgentState) -> list[str]:
         category = str(habit.get("category", "")).strip().casefold().replace("_", "-")
         if category in KNOWN_TOPICS and category not in topics:
             topics.append(category)
+    recent_context = " ".join(
+        str(message.get("content", ""))
+        for message in state.get("recent_messages", [])[-4:]
+        if isinstance(message, Mapping)
+    )
     normalized_input = _fold_topic_text(
-        state.get("normalized_input", state["original_input"])
+        " ".join(
+            (
+                state.get("normalized_input", state["original_input"]),
+                state.get("conversation_summary", "")[:1_000],
+                recent_context[:1_500],
+            )
+        )
     )
     for topic, pattern in TOPIC_PATTERNS.items():
         if pattern.search(normalized_input) and topic not in topics:
@@ -116,9 +127,9 @@ def _retrieval_topics(state: AgentState) -> list[str]:
 def _build_query(state: AgentState) -> str:
     original = state.get("normalized_input", state["original_input"]).strip()
     topics = _retrieval_topics(state)
-    # The multilingual embedding consumes the original language. Appending
-    # canonical topic IDs supplies a controlled lexical hint without translating
-    # the user's message or inventing facts.
+    # The query embedding consumes the original language. Canonical topic IDs
+    # make referential follow-ups ("sources for that?") traceable to the recent
+    # conversation without translating user content or inventing facts.
     suffix = f"\nRelevant topics: {', '.join(topics)}" if topics else ""
     return f"{original}{suffix}"[:2_000].strip()
 
@@ -134,9 +145,11 @@ def _rerank_document(
     fusion_score = _clamp(float(metadata.get("fusion_score", 0.0)))
     lexical_score = max(0.0, float(metadata.get("lexical_score", 0.0)))
 
-    # E5 cosine similarities cluster above zero. Mapping the useful operating
-    # interval [0.65, 0.90] avoids presenting raw similarity as probability.
-    semantic_relevance = _clamp((dense_score - 0.65) / 0.25)
+    # text-embedding-3-small cosine similarities for the curated corpus become
+    # useful above roughly 0.20. Preserve the full remaining cosine range so
+    # strong candidates still retain their relative ordering. This is an
+    # internal relevance score, not a probability.
+    semantic_relevance = _clamp((dense_score - 0.20) / 0.80)
     lexical_relevance = 1.0 - math.exp(-lexical_score)
     topic_match = 1.0 if document.get("topic") in topics else 0.0
     traceability = 1.0 if metadata.get("source_path") else 0.0

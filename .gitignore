@@ -6,6 +6,21 @@ dist/
 wheels/
 *.egg-info
 
+# Alfred's audited RAG corpus is a required runtime asset. Keep generated build
+# directories ignored globally, but version the two small canonical artifacts
+# that the production retriever validates and loads.
+!Alfred/rag/corpus/build/
+Alfred/rag/corpus/build/*
+!Alfred/rag/corpus/build/chunks.jsonl
+!Alfred/rag/corpus/build/manifest.json
+!Alfred/rag/corpus/build/faiss/
+Alfred/rag/corpus/build/faiss/*
+!Alfred/rag/corpus/build/faiss/knowledge.faiss
+!Alfred/rag/corpus/build/faiss/knowledge.metadata.jsonl
+!Alfred/rag/corpus/build/faiss/playbooks.faiss
+!Alfred/rag/corpus/build/faiss/playbooks.metadata.jsonl
+!Alfred/rag/corpus/build/faiss/manifest.json
+
 # Virtual environments
 .venv
 .env

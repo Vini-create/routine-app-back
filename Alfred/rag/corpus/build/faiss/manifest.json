@@ -1,0 +1,21 @@
+{
+  "chunks_sha256": "884ba37374c3be2c538eda3a7182f9ee91a01141907380da2a1c806678051322",
+  "embedding_model": "text-embedding-3-small",
+  "generated_at": "2026-07-17T22:53:51.934128+00:00",
+  "indexes": {
+    "knowledge": {
+      "chunks": 28,
+      "dimension": 1536,
+      "index_file": "knowledge.faiss",
+      "metadata_file": "knowledge.metadata.jsonl",
+      "metric": "cosine_similarity"
+    },
+    "playbooks": {
+      "chunks": 17,
+      "dimension": 1536,
+      "index_file": "playbooks.faiss",
+      "metadata_file": "playbooks.metadata.jsonl",
+      "metric": "cosine_similarity"
+    }
+  }
+}

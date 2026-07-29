@@ -3285,6 +3285,11 @@ de um `glob` amplo. O corpus é público e curado, portanto essa camada não lê
 nenhum registro pertencente a usuário e não existe risco de misturar dados
 privados entre contas.
 
+> **Atualização de produção (29 de julho):** a estratégia local com E5 descrita
+> abaixo foi substituída pelos vetores FAISS pré-computados e pelo embedding
+> remoto apenas da consulta. A motivação, o incidente e o código atual estão
+> documentados na seção 11 ao final deste guia.
+
 ## 4. Embedding multilíngue local
 
 O modelo escolhido foi:
@@ -5743,3 +5748,76 @@ RAG processando
   → sucesso: artifacts → tokens → done
   → desconexão: cancelar task → liberar reserva
 ```
+
+## 11. Correção do RAG no deploy e redução de memória
+
+O erro observado em produção acontecia apenas quando a mensagem era roteada
+para `consultar_conhecimento`. A conversa comum funcionava porque não precisava
+abrir o corpus.
+
+Havia duas causas de infraestrutura:
+
+1. `Alfred/rag/corpus/build/` era ignorado globalmente pelo Git, embora
+   `load_production_corpus()` dependesse de `chunks.jsonl` e `manifest.json`;
+2. o runtime tentava carregar `multilingual-e5-small`, Torch e Transformers no
+   primeiro RAG, elevando muito a memória de uma instância pequena.
+
+Os artefatos auditados necessários agora são versionados:
+
+```text
+Alfred/rag/corpus/build/
+├── chunks.jsonl
+├── manifest.json
+└── faiss/
+    ├── knowledge.faiss
+    ├── knowledge.metadata.jsonl
+    ├── playbooks.faiss
+    ├── playbooks.metadata.jsonl
+    └── manifest.json
+```
+
+O `Dockerfile` copia essas entradas explicitamente. Se desaparecerem, o build
+falha imediatamente, em vez de publicar uma aplicação cuja rota RAG quebra
+somente em runtime.
+
+Os vetores dos 45 documentos já estavam pré-computados com
+`text-embedding-3-small`. O runtime agora valida:
+
+```python
+if manifest["chunks_sha256"] != corpus_manifest["chunks_sha256"]:
+    raise ValueError("The FAISS index was built from a different corpus.")
+
+if set(vectors_by_chunk) != set(chunk_ids):
+    raise ValueError("The FAISS vectors do not match the approved corpus.")
+```
+
+Somente a consulta curta é vetorizada pela API. A mesma `OPENAI_API_KEY` do
+Alfred é usada e nenhuma chave nova é necessária. `torch`,
+`sentence-transformers`, `transformers` e `langchain-huggingface` foram
+removidos das dependências. Na medição local, a montagem do recuperador caiu de
+aproximadamente 1 GB no caminho com o modelo local para cerca de 140 MB com os
+vetores pré-computados.
+
+Também foi corrigida a continuidade semântica de perguntas como:
+
+```text
+Usuário: Como acabar com a procrastinação?
+Usuário: Tem alguma referência relacionada?
+```
+
+O node de consulta examina o resumo e as quatro mensagens recentes somente para
+identificar IDs editoriais permitidos, como `procrastination`. O conteúdo do
+usuário continua sendo evidência não confiável e nunca vira instrução:
+
+```text
+Tem alguma referência relacionada?
+Relevant topics: procrastination
+```
+
+Validações executadas:
+
+- consulta real de embedding retornando documentos de procrastinação;
+- integridade de 45 chunks e 45 vetores de 1.536 dimensões;
+- teste de regressão para pergunta referencial;
+- pipeline RAG e estrutura LangGraph;
+- matriz das seis habilidades, streaming, billing e persistência.

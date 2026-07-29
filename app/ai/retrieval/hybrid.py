@@ -130,6 +130,7 @@ class HybridKnowledgeRetriever:
         *,
         documents: tuple[CorpusChunk, ...],
         embeddings: Embeddings,
+        document_vectors: np.ndarray | None = None,
         candidate_pool: int = 16,
     ) -> None:
         if not documents:
@@ -139,9 +140,15 @@ class HybridKnowledgeRetriever:
         self._documents = documents
         self._embeddings = embeddings
         self._candidate_pool = min(candidate_pool, len(documents))
-        vectors = np.asarray(
-            embeddings.embed_documents([document.content for document in documents]),
-            dtype=np.float32,
+        vectors = (
+            np.asarray(document_vectors, dtype=np.float32)
+            if document_vectors is not None
+            else np.asarray(
+                embeddings.embed_documents(
+                    [document.content for document in documents]
+                ),
+                dtype=np.float32,
+            )
         )
         if vectors.ndim != 2 or vectors.shape[0] != len(documents):
             raise ValueError("The embedding matrix does not match the corpus.")
@@ -218,7 +225,7 @@ class HybridKnowledgeRetriever:
         *,
         limit: int = 12,
     ) -> list[dict[str, object]]:
-        # Sentence Transformers is synchronous and CPU-bound. Offloading keeps
+        # Query embedding and ranking are synchronous. Offloading keeps
         # concurrent FastAPI/LangGraph requests from blocking the event loop.
         import asyncio
 

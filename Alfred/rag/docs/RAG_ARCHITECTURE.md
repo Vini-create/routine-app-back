@@ -16,7 +16,7 @@ vetorial.
 A arquitetura separa quatro responsabilidades:
 
 1. preparação e governança do corpus;
-2. geração local e cache em processo dos embeddings;
+2. carregamento do índice FAISS auditado e embedding da consulta;
 3. classificação e recuperação de contexto;
 4. orquestração conversacional, realizada pelo futuro grafo da aplicação.
 
@@ -48,8 +48,8 @@ tratados como evidência científica.
 ## Pipeline de preparação e indexação
 
 O pipeline editorial transforma os documentos canônicos em um artefato JSONL
-reproduzível. No runtime, o modelo local indexa esse pequeno corpus uma vez por
-processo:
+reproduzível e em índices FAISS versionados. No runtime, os vetores dos
+documentos são apenas carregados e validados:
 
 ```text
 documentos canônicos
@@ -59,8 +59,9 @@ documentos canônicos
 → validação pelo tokenizer do modelo de embeddings
 → artefato JSONL de chunks
 → validação de hash e cardinalidade
-→ embeddings multilíngues locais
-→ matriz densa normalizada e índice BM25 em memória
+→ embeddings de documentos com text-embedding-3-small
+→ índices FAISS e sidecars de metadados versionados
+→ matriz densa validada e índice BM25 em memória
 ```
 
 ### Carregamento
@@ -91,10 +92,15 @@ acoplar a preparação editorial à infraestrutura vetorial.
 Os textos são convertidos em vetores de dimensão consistente. Antes da escrita,
 o pipeline valida quantidade, dimensão e integridade numérica dos embeddings.
 
-O LangChain carrega `intfloat/multilingual-e5-small` localmente. Consultas usam
-o prefixo `query:` e documentos usam `passage:`, conforme o treinamento do
-modelo. A saída é normalizada para similaridade de cosseno. Nenhuma chave de
-API ou chamada paga é necessária para embeddings.
+Os vetores dos 45 documentos foram gerados com
+`text-embedding-3-small`, normalizados e persistidos em dois namespaces FAISS:
+knowledge e playbooks. O runtime valida hash do corpus, modelo, dimensão,
+cardinalidade e IDs antes de aceitar a matriz.
+
+Somente a consulta curta do usuário é vetorizada em runtime, com a mesma
+`OPENAI_API_KEY` já usada pelos modelos do Alfred. Isso elimina Torch,
+Transformers e o modelo local residente em memória. A chamada de embedding é
+limitada às rotas RAG e permanece separada das chamadas de LLM.
 
 O JSONL e o manifesto continuam versionados. Antes da indexação, o loader
 confere SHA-256, cardinalidade, IDs únicos, idioma, status editorial e tipos
@@ -109,7 +115,7 @@ conversacional:
 mensagem original no idioma do usuário
 → verificações anteriores ao RAG
 → pistas determinísticas de tópico
-→ embedding multilíngue da consulta
+→ embedding da consulta compatível com o índice FAISS
 → busca densa + BM25 lexical
 → reciprocal-rank fusion
 → reranqueamento determinístico
@@ -224,9 +230,10 @@ sem reescrever o grafo conversacional.
 ## Ferramentas utilizadas
 
 - Python
-- multilingual E5 local
+- OpenAI `text-embedding-3-small` para consultas
+- FAISS com vetores de documentos pré-computados
 - NumPy
-- LangChain Hugging Face
+- LangChain OpenAI
 - NumPy
 - tiktoken
 - PyYAML
@@ -240,7 +247,7 @@ sem reescrever o grafo conversacional.
 - chunking semântico e determinístico
 - validação por tokenizer
 - embeddings em lote
-- busca vetorial multilíngue local
+- busca vetorial com índice pré-computado
 - BM25 e Reciprocal Rank Fusion
 - similaridade de cosseno
 - roteamento híbrido lexical e semântico

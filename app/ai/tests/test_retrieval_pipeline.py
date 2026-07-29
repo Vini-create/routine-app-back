@@ -21,6 +21,7 @@ from app.ai.graph.runtime import GraphRuntimeContext
 from app.ai.graph.state import AgentState
 from app.ai.retrieval.corpus import CorpusChunk, load_production_corpus
 from app.ai.retrieval.hybrid import HybridKnowledgeRetriever
+from app.ai.retrieval.runtime import _load_precomputed_vectors
 
 
 class FakeEmbeddings(Embeddings):
@@ -154,6 +155,16 @@ def test_corpus_loader_rejects_a_tampered_artifact(tmp_path: Path) -> None:
         load_production_corpus(chunks, manifest)
 
 
+def test_precomputed_vectors_cover_the_complete_approved_corpus() -> None:
+    corpus = load_production_corpus()
+
+    vectors = _load_precomputed_vectors(
+        tuple(document.chunk_id for document in corpus)
+    )
+
+    assert vectors.shape == (45, 1536)
+
+
 def test_hybrid_retrieval_matches_portuguese_query_to_english_evidence() -> None:
     retriever = HybridKnowledgeRetriever(
         documents=(
@@ -191,6 +202,27 @@ def test_hybrid_retrieval_matches_portuguese_query_to_english_evidence() -> None
     assert documents[0]["chunk_id"] == "chunk-procrastination"
     assert documents[0]["metadata"]["dense_rank"] == 1  # type: ignore[index]
     assert 0 <= documents[0]["retrieval_score"] <= 1  # type: ignore[operator]
+
+
+@pytest.mark.asyncio
+async def test_referential_follow_up_inherits_topic_from_recent_context() -> None:
+    state = base_state()
+    state["original_input"] = "Tem alguma referência relacionada?"
+    state["normalized_input"] = state["original_input"]
+    state["conversation_summary"] = (
+        "The user asked for help dealing with procrastination."
+    )
+    state["recent_messages"] = [
+        {
+            "role": "user",
+            "content": "Como acabar com a procrastinação?",
+        }
+    ]
+
+    update = await build_retrieval_query_node(state)
+
+    assert update["retrieval_topics"] == ["procrastination"]
+    assert "Relevant topics: procrastination" in update["retrieval_query"]
 
 
 @pytest.mark.asyncio

@@ -38,9 +38,7 @@ class Settings(BaseSettings):
     ai_alfred_model: str = "gpt-4o-mini"
     ai_feedbacker_model: str = "gpt-5"
     ai_critic_model: str = "gpt-4o-mini"
-    ai_embedding_model: str = "intfloat/multilingual-e5-small"
-    ai_embedding_device: str = "cpu"
-    ai_embedding_batch_size: int = Field(default=16, ge=1, le=128)
+    ai_embedding_model: str = "text-embedding-3-small"
     ai_rag_candidate_limit: int = Field(default=12, ge=4, le=50)
     ai_rag_evidence_limit: int = Field(default=4, ge=1, le=8)
     ai_model_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)

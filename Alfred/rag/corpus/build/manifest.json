@@ -1,0 +1,9 @@
+{
+  "chunk_schema_version": "1.0.0",
+  "chunking_strategy": "whole_document_when_within_token_limits",
+  "chunks": 45,
+  "chunks_sha256": "884ba37374c3be2c538eda3a7182f9ee91a01141907380da2a1c806678051322",
+  "embedding_model": "text-embedding-3-small",
+  "generated_at": "2026-07-17T20:00:13.259095+00:00",
+  "production_documents": 45
+}
