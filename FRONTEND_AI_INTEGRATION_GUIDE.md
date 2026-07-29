@@ -522,6 +522,7 @@ Use `fetch`, `ReadableStream` e `TextDecoder`.
 
 ```text
 status
+heartbeat   zero ou mais enquanto o grafo está processando
 reference   zero ou mais
 analysis    zero ou um
 patch       zero ou um
@@ -551,6 +552,15 @@ caso a resposta HTTP não será SSE.
 ```
 
 `node` é informativo. Não construa lógica de negócio baseada nele.
+
+### `heartbeat`
+
+```json
+{}
+```
+
+Mantém a conexão ativa durante etapas mais longas, como RAG e Feedbacker.
+O frontend deve ignorá-lo; ele não altera texto, status ou artefatos.
 
 ### `reference`
 
@@ -600,7 +610,6 @@ O payload é um `AnalysisReport`.
 }
 ```
 
-Atualmente cada evento contém um grupo de até 12 palavras, não necessariamente
 Uma palavra legível (não necessariamente um token do tokenizer). O backend
 preserva a pontuação e os espaços originais; ao concatenar, não remova espaços
 do fim de um chunk nem acrescente um segundo espaço.

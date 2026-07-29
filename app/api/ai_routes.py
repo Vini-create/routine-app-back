@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -57,6 +58,10 @@ AI_WRITE_RATE_LIMIT = "20/minute"
 # This is deliberately small: it makes each SSE frame observable by the browser
 # without turning a concise Alfred answer into a long typewriter animation.
 STREAM_WORD_DELAY_SECONDS = 0.018
+# Railway and mobile networks may close an SSE connection that stays silent
+# while RAG or Feedbacker is running. Keep transport activity independent from
+# model latency.
+STREAM_HEARTBEAT_SECONDS = 8.0
 
 
 async def get_current_ai_billing_access(
@@ -132,14 +137,27 @@ async def stream_alfred(
     current_user: User = Depends(get_current_verified_user),
 ) -> StreamingResponse:
     async def events() -> AsyncIterator[str]:
+        invoke_task: asyncio.Task[AIInvokeResponse] | None = None
         yield _sse(
             "status",
             {"node": "iniciar_estado", "message": "Alfred iniciou a solicitação."},
         )
         try:
-            response = await _orchestrator(session, current_user).invoke(
-                payload, is_stream=True
+            invoke_task = asyncio.create_task(
+                _orchestrator(session, current_user).invoke(
+                    payload,
+                    is_stream=True,
+                )
             )
+            while True:
+                try:
+                    response = await asyncio.wait_for(
+                        asyncio.shield(invoke_task),
+                        timeout=STREAM_HEARTBEAT_SECONDS,
+                    )
+                    break
+                except TimeoutError:
+                    yield _sse("heartbeat", {})
             for reference in response.references:
                 yield _sse("reference", reference.model_dump(mode="json"))
             if response.analysis is not None:
@@ -178,6 +196,13 @@ async def stream_alfred(
                     "message": error.message,
                 },
             )
+        finally:
+            # A disconnected client must not leave a model call and its stream
+            # reservation running invisibly in the background.
+            if invoke_task is not None and not invoke_task.done():
+                invoke_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await invoke_task
 
     return StreamingResponse(
         events(),

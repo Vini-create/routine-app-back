@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from time import perf_counter
@@ -49,6 +50,8 @@ from app.billing.service import require_active_billing_access
 from app.core.config import settings
 from app.models.ai import AIGraphCheckpoint
 from app.models.auth import User
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -284,7 +287,7 @@ class AIOrchestrator:
         ) > 0
         try:
             retriever = (
-                build_default_knowledge_retriever()
+                await asyncio.to_thread(build_default_knowledge_retriever)
                 if route
                 in {
                     InternalRoute.RAG_THEN_ALFRED,
@@ -412,6 +415,12 @@ class AIOrchestrator:
             )
             raise
         except Exception as exc:
+            if not isinstance(exc, (AIApplicationError, asyncio.CancelledError)):
+                logger.exception(
+                    "Unexpected Alfred graph failure request_id=%s route=%s",
+                    request_id,
+                    route.value,
+                )
             await self._session.rollback()
             try:
                 await fail_ai_usage(

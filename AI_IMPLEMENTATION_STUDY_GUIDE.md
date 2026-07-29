@@ -5719,3 +5719,27 @@ O teste substitui o grafo e o recuperador por implementações determinísticas:
 isso comprova o contrato público, quotas, roteamento e persistência sem chamar
 modelos pagos. O pipeline real de recuperação tem testes próprios em
 `app/ai/tests/test_retrieval_pipeline.py`.
+
+## 10. Robustez de SSE em RAG e Feedbacker
+
+RAG e análises profundas podem passar vários segundos carregando modelos locais
+ou executando o grafo antes de produzir texto. Um stream que emite `status` e
+depois fica silencioso pode ser encerrado por uma rede móvel ou proxy, deixando
+uma reserva temporariamente ativa.
+
+A rota agora executa o orquestrador em uma task e envia `heartbeat` a cada oito
+segundos. A montagem síncrona do recuperador local também foi movida para
+`asyncio.to_thread`, mantendo o event loop livre para enviar esses eventos.
+
+Se o cliente desconectar, o `finally` do gerador cancela a task do grafo. O
+orquestrador recebe `CancelledError` e libera a reserva. No frontend, falhas de
+parser ou de handler cancelam explicitamente o `ReadableStream` e o
+`AbortController`, propagando a desconexão ao backend.
+
+```text
+RAG processando
+  → heartbeat periódico
+  → conexão permanece ativa
+  → sucesso: artifacts → tokens → done
+  → desconexão: cancelar task → liberar reserva
+```
