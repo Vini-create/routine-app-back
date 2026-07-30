@@ -223,7 +223,7 @@ flowchart TD
     subgraph ALFRED["7. Capacidade conversational"]
         A1[Node: selecionar_estrategia_alfred<br/>Escolhe estratégia pelo estado comportamental]
         A2[Node: planejar_resposta_alfred<br/>Objetivo, tom, pontos e próximos passos]
-        A3[Node: gerar_intervencao_alfred<br/>gpt-4o-mini; resposta estruturada<br/>+ updated_summary_en]
+        A3[Node: gerar_intervencao_alfred<br/>gpt-4o-mini; resposta estruturada<br/>+ revisão antirrepetição opcional<br/>+ updated_summary_en]
         A4[Node: renderizar_resposta_alfred<br/>Monta mensagem e candidatos de memória]
     end
 
@@ -482,7 +482,7 @@ Alfred e Feedbacker retornam `updated_summary_en` na mesma chamada que gera a
 resposta:
 
 ```text
-Alfred     → gpt-4o-mini, max_tokens 1300
+Alfred     → gpt-4o-mini, temperature 0.3, max_tokens 1300
 Feedbacker → gpt-5, max_tokens 3600
 Resumo     → máximo de 1000 caracteres
 ```

@@ -16,6 +16,7 @@ from app.ai.graph.nodes.entry import assess_prompt_injection
 from app.ai.graph.runtime import GraphRuntimeContext
 from app.ai.graph.state import AgentState
 from app.ai.retrieval.hybrid import lexical_tokens
+from app.ai.retrieval.sources import resolve_public_sources
 from app.core.config import settings
 
 KNOWN_TOPICS = frozenset(
@@ -422,24 +423,25 @@ async def validate_retrieval_node(state: AgentState) -> dict[str, Any]:
 
 
 async def build_evidence_pack_node(state: AgentState) -> dict[str, Any]:
-    references = []
+    evidence_items = []
+    source_ids: list[str] = []
     for document in _select_evidence_documents(
         list(state.get("retrieved_documents", []))
     ):
         metadata = document.get("metadata", {})
-        references.append(
+        document_source_ids = list(metadata.get("source_ids", []))
+        source_ids.extend(document_source_ids)
+        evidence_items.append(
             {
                 "document_id": document["document_id"],
                 "chunk_id": document["chunk_id"],
                 "title": document["title"],
-                "source": document["source"],
-                "source_ids": list(metadata.get("source_ids", [])),
+                "source_ids": document_source_ids,
                 "topic": document.get("topic"),
                 "supporting_excerpt": _supporting_excerpt(document["content"]),
-                "retrieval_score": document.get("retrieval_score", 0.0),
-                "rerank_score": document.get("rerank_score", 0.0),
             }
         )
+    references = resolve_public_sources(source_ids)
     return traced_update(
         state,
         "montar_evidence_pack",
@@ -447,6 +449,7 @@ async def build_evidence_pack_node(state: AgentState) -> dict[str, Any]:
             "query": state.get("retrieval_query", ""),
             "topics": state.get("retrieval_topics", []),
             "references": references,
+            "evidence_items": evidence_items,
             "confidence": state.get("retrieval_confidence", 0.0),
             "coverage": state.get("retrieval_coverage", 0.0),
             "insufficient_evidence": False,
@@ -469,6 +472,7 @@ async def mark_low_confidence_node(state: AgentState) -> dict[str, Any]:
             "query": state.get("retrieval_query", ""),
             "topics": state.get("retrieval_topics", []),
             "references": [],
+            "evidence_items": [],
             "confidence": state.get("retrieval_confidence", 0.0),
             "coverage": state.get("retrieval_coverage", 0.0),
             "insufficient_evidence": True,

@@ -220,15 +220,22 @@ export interface AICapabilitiesResponse {
 }
 
 export interface EvidenceReference {
-  document_id: string;
-  chunk_id: string;
+  source_id?: string | null;
   title: string;
-  source: string;
-  source_ids: string[];
-  topic: string | null;
-  supporting_excerpt: string | null;
-  retrieval_score: number;
-  rerank_score: number;
+  authors?: string[];
+  publication_year?: number | null;
+  url?: string | null;
+  doi?: string | null;
+
+  // Compatibilidade com mensagens persistidas antes deste contrato.
+  document_id?: string | null;
+  chunk_id?: string | null;
+  source?: string | null;
+  source_ids?: string[];
+  topic?: string | null;
+  supporting_excerpt?: string | null;
+  retrieval_score?: number | null;
+  rerank_score?: number | null;
 }
 
 export interface ExecutionDiagnosis {
@@ -565,6 +572,13 @@ O frontend deve ignorá-lo; ele não altera texto, status ou artefatos.
 ### `reference`
 
 O payload é um `EvidenceReference`.
+
+As referências novas são citações públicas compactas resolvidas pelo backend:
+`title`, `authors`, `publication_year`, `url` e `doi`. Exiba somente esses
+metadados — de preferência com o título como link externo. Não renderize
+`supporting_excerpt`, `source`, caminhos canônicos, IDs de chunk nem scores.
+Esses campos legados continuam opcionais apenas para o reload de conversas
+antigas; os trechos usados para grounding permanecem internos ao backend.
 
 ### `analysis`
 

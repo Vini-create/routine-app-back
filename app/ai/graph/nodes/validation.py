@@ -82,8 +82,8 @@ async def critique_output_node(
                     "draft_message": state.get("rendered_response", ""),
                     "analysis": state.get("analysis_report"),
                     "proposed_patch": state.get("proposed_patch"),
-                    "evidence_references": state.get("evidence_pack", {}).get(
-                        "references", []
+                    "evidence_items": state.get("evidence_pack", {}).get(
+                        "evidence_items", []
                     ),
                     "safety": {
                         "level": state.get("safety_level"),

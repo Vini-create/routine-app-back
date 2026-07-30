@@ -5821,3 +5821,130 @@ Validações executadas:
 - teste de regressão para pergunta referencial;
 - pipeline RAG e estrutura LangGraph;
 - matriz das seis habilidades, streaming, billing e persistência.
+
+## 12. Profundidade conversacional, antirrepetição e fontes públicas
+
+O diagnóstico da resposta repetitiva mostrou que o problema não estava somente
+no modelo. Três decisões do fluxo empurravam quase toda conversa para a mesma
+forma:
+
+```text
+qualquer assunto
+  → practical_next_step
+  → menor intervenção possível
+  → uma ação pequena para hoje
+```
+
+O grafo agora seleciona uma intenção de resposta adequada ao pedido:
+
+```python
+if direct_strategy is not None:
+    strategy = direct_strategy
+elif state.get("evidence_pack", {}).get("references"):
+    strategy = "evidence_explanation"
+elif dropout_risk_is_high_and_reliable:
+    strategy = "recovery_support"
+else:
+    strategy = "adaptive_conversation"
+```
+
+`adaptive_conversation` pode explicar, comparar, refletir, esclarecer ou montar
+um plano. `evidence_explanation` prioriza mecanismo, achados, limitações e
+relevância. Uma ação prática só aparece quando ajuda a responder ao pedido; ela
+não é mais uma obrigação universal.
+
+O prompt também recebeu critérios explícitos de qualidade:
+
+- responder a pergunta antes de aconselhar;
+- incluir raciocínio, distinções e evidência suficientes;
+- não transformar toda resposta em hábito, microação ou “comece pequeno”;
+- tratar as respostas recentes como uma lista do que não deve ser repetido;
+- avançar o assunto quando o usuário faz uma pergunta de continuação.
+
+Além da prevenção no prompt, existe uma validação determinística após a geração.
+Ela compara a nova mensagem às três respostas mais recentes usando sobreposição
+lexical e similaridade de sequência:
+
+```python
+if _repeats_recent_answer(state, result.parsed.message):
+    result = await gateway.invoke_structured(
+        role=ModelRole.ALFRED,
+        schema=AlfredIntervention,
+        user_prompt=payload_with_revision_requirement,
+    )
+```
+
+Há no máximo uma revisão extra, evitando loop e custo sem limite. O segundo
+prompt exige um ângulo materialmente diferente, mais informação e novas
+distinções. Se o usuário pedir explicitamente para repetir, a regra é ignorada.
+
+Para testar primeiro quanto o fluxo bem definido consegue extrair do modelo
+econômico, o papel conversacional permanece em:
+
+```text
+Alfred → gpt-4o-mini
+Chat Completions
+temperature = 0.3
+top_p = 1.0
+frequency_penalty = 0.0
+presence_penalty = 0.0
+max_tokens = 1300
+```
+
+Router e crítico também usam `gpt-4o-mini`, pois são tarefas estreitas e
+estruturadas. O Feedbacker continua separado, com mais reasoning para análises
+profundas. A profundidade da conversa comum vem primeiro do contrato do prompt,
+do contexto selecionado, da estratégia do grafo e da revisão antirrepetição.
+
+Modelos alternativos podem ser avaliados pelo script
+`scripts/test_alfred_model.py`, sem alterar a configuração da aplicação. Assim,
+uma troca futura pode ser decidida comparando as mesmas perguntas e o mesmo
+system prompt, em vez de atribuir ao modelo um problema causado pelo fluxo.
+
+```bash
+uv run python -m scripts.test_alfred_model \
+  "Por que a procrastinação persiste mesmo quando a meta é importante?"
+
+uv run python -m scripts.test_alfred_model \
+  "Por que a procrastinação persiste mesmo quando a meta é importante?" \
+  --model gpt-4.1-mini
+```
+
+O primeiro comando usa `AI_ALFRED_MODEL`; o segundo sobrescreve o modelo apenas
+naquela execução. O script lê `OPENAI_API_KEY` pelas mesmas configurações
+seguras da aplicação e imprime o ID efetivamente usado, a contagem de tokens e
+a resposta. Para uma comparação justa, mantenha mensagem e idioma iguais.
+
+### Evidência interna não é referência pública
+
+Os chunks recuperados ainda chegam ao Alfred e ao crítico com trecho, score e
+metadados técnicos. Isso é necessário para grounding, mas não deve ocupar a
+interface:
+
+```text
+evidence_items → somente backend/modelos
+references     → contrato público do frontend
+```
+
+As referências públicas são resolvidas pelo `source_id` no registro auditado e
+contêm apenas:
+
+```json
+{
+  "source_id": "string",
+  "title": "string",
+  "authors": ["string"],
+  "publication_year": 2024,
+  "url": "https://...",
+  "doi": "string ou null"
+}
+```
+
+Somente fontes ativas, verificadas e com URL pública válida são expostas. O
+frontend mostra título, autoria, ano e link; não mostra o texto integral do
+chunk, caminho do corpus ou scores. Campos antigos permanecem nullable para
+preservar o histórico já salvo.
+
+Testes adicionados cobrem a escolha de estratégia, ausência do viés de
+microação, uma única revisão antirrepetição, resolução do registro público,
+separação dos trechos internos e renderização compacta das fontes no frontend.

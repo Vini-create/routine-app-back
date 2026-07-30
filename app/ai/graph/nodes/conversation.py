@@ -1,7 +1,8 @@
-"""Alfred conversational capability with one bounded model call."""
+"""Alfred conversation with a bounded model call and one optional rewrite."""
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from typing import Any
 
 from langgraph.runtime import Runtime
@@ -21,6 +22,10 @@ _CONTEXT_FREE_STRATEGIES = {
     "identity_and_scope",
     "context_transparency",
 }
+_EXPLICIT_REPETITION_REQUEST = re.compile(
+    r"\b(?:repita|repete|diga de novo|novamente|repeat|say that again|"
+    r"repite|repetez)\b"
+)
 
 
 def _canonical(value: str) -> str:
@@ -63,17 +68,18 @@ def _direct_conversation_strategy(message: str) -> str | None:
 
 async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
     direct_strategy = _direct_conversation_strategy(state["original_input"])
-    dropout_level = state.get("dropout_risk", {}).get("level")
+    dropout_risk = state.get("dropout_risk", {})
     if direct_strategy is not None:
         strategy = direct_strategy
-    elif state.get("evidence_pack"):
-        strategy = "evidence_based_guidance"
-    elif dropout_level == "high":
-        strategy = "recovery_and_reduction"
-    elif state.get("detected_intent") == "general_conversation":
-        strategy = "supportive_clarification"
+    elif state.get("evidence_pack", {}).get("references"):
+        strategy = "evidence_explanation"
+    elif (
+        dropout_risk.get("level") == "high"
+        and float(dropout_risk.get("confidence", 0.0)) >= 0.5
+    ):
+        strategy = "recovery_support"
     else:
-        strategy = "practical_next_step"
+        strategy = "adaptive_conversation"
     return traced_update(
         state,
         "selecionar_estrategia_alfred",
@@ -98,6 +104,21 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
             "Answer transparently which application data categories are "
             "available in this request, using context_inventory only."
         ),
+        "evidence_explanation": (
+            "Answer the evidence question directly. Synthesize the supported "
+            "findings, material limitations, and relevance to the user's exact "
+            "question. Practical advice is secondary and only included when asked."
+        ),
+        "recovery_support": (
+            "Address the request while accounting for a high-confidence execution "
+            "difficulty. Explain the relevant tradeoffs and offer options rather "
+            "than automatically prescribing a smaller daily action."
+        ),
+        "adaptive_conversation": (
+            "Resolve the current request at an appropriate depth. Choose whether "
+            "the user needs an explanation, reflection, comparison, clarification, "
+            "or plan; do not force the turn into coaching advice."
+        ),
     }
     return traced_update(
         state,
@@ -105,28 +126,74 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
         alfred_plan=state.get(
             "alfred_plan",
             {
-                "objective": objectives.get(
-                    strategy,
-                    "Help the user choose one realistic next action.",
-                ),
+                "objective": objectives.get(strategy, objectives["adaptive_conversation"]),
                 "tone": "warm_collaborative_practical",
                 "key_points": [
                     f"selected_strategy={strategy}",
                     f"dropout_risk={risk.get('level', 'unknown')}",
                     f"anomaly_count={len(anomalies)}",
                 ],
-                "next_steps": (
-                    []
-                    if strategy in _CONTEXT_FREE_STRATEGIES
-                    else ["prioritize_the_smallest_useful_intervention"]
-                ),
-                "should_ask_question": (
-                    False
-                    if strategy in _CONTEXT_FREE_STRATEGIES
-                    else not bool(state.get("habits"))
-                ),
+                "next_steps": [],
+                "should_ask_question": False,
             },
         ),
+    )
+
+
+def _assistant_messages(state: AgentState) -> list[str]:
+    return [
+        str(message.get("content", "")).strip()
+        for message in state.get("recent_messages", [])[-8:]
+        if message.get("role") == "assistant"
+        and str(message.get("content", "")).strip()
+    ][-3:]
+
+
+def _normalized_words(value: str) -> set[str]:
+    return {
+        word
+        for word in re.findall(r"\b[\w-]{4,}\b", _canonical(value))
+        if word
+        not in {
+            "para",
+            "como",
+            "comecar",
+            "voce",
+            "essa",
+            "isso",
+            "pode",
+            "your",
+            "that",
+            "this",
+            "with",
+            "from",
+            "para",
+            "esta",
+        }
+    }
+
+
+def _repetition_score(candidate: str, previous: str) -> float:
+    candidate_words = _normalized_words(candidate)
+    previous_words = _normalized_words(previous)
+    union = candidate_words | previous_words
+    lexical_overlap = (
+        len(candidate_words & previous_words) / len(union) if union else 0.0
+    )
+    sequence_overlap = SequenceMatcher(
+        None,
+        _canonical(candidate),
+        _canonical(previous),
+    ).ratio()
+    return max(lexical_overlap, sequence_overlap)
+
+
+def _repeats_recent_answer(state: AgentState, candidate: str) -> bool:
+    if _EXPLICIT_REPETITION_REQUEST.search(_canonical(state["original_input"])):
+        return False
+    return any(
+        _repetition_score(candidate, previous) >= 0.58
+        for previous in _assistant_messages(state)
     )
 
 
@@ -153,64 +220,97 @@ async def generate_alfred_intervention_node(
                 if strategy == "context_transparency"
                 else {}
             )
+            user_payload = {
+                "USER_INPUT": state["original_input"],
+                "selected_strategy": strategy,
+                "response_plan": state.get("alfred_plan", {}),
+                "context_inventory": context_inventory,
+                "behavioral_state": (
+                    state.get("behavioral_state", {})
+                    if use_routine_context
+                    else {}
+                ),
+                "goals": (
+                    state.get("goals", [])[:10]
+                    if use_routine_context
+                    else []
+                ),
+                "habits": (
+                    state.get("habits", [])[:20]
+                    if use_routine_context
+                    else []
+                ),
+                "evidence_pack": (
+                    state.get("evidence_pack", {})
+                    if use_routine_context
+                    else {}
+                ),
+                "UNTRUSTED_CONTEXT": {
+                    "recent_messages": (
+                        state.get("recent_messages", [])[-8:]
+                        if use_routine_context
+                        else []
+                    ),
+                    "memories": (
+                        state.get("relevant_memories", [])[:10]
+                        if use_routine_context
+                        else []
+                    ),
+                    "conversation_summary_en": (
+                        state.get("conversation_summary", "")
+                        if use_routine_context
+                        else ""
+                    ),
+                },
+            }
             result = await gateway.invoke_structured(
                 role=ModelRole.ALFRED,
                 schema=AlfredIntervention,
                 system_prompt=build_alfred_system_prompt(
                     state.get("response_language", "en")
                 ),
-                user_prompt=bounded_json(
-                    {
-                        "USER_INPUT": state["original_input"],
-                        "selected_strategy": strategy,
-                        "response_plan": state.get("alfred_plan", {}),
-                        "context_inventory": context_inventory,
-                        "behavioral_state": (
-                            state.get("behavioral_state", {})
-                            if use_routine_context
-                            else {}
-                        ),
-                        "goals": (
-                            state.get("goals", [])[:10]
-                            if use_routine_context
-                            else []
-                        ),
-                        "habits": (
-                            state.get("habits", [])[:20]
-                            if use_routine_context
-                            else []
-                        ),
-                        "evidence_pack": (
-                            state.get("evidence_pack", {})
-                            if use_routine_context
-                            else {}
-                        ),
-                        "UNTRUSTED_CONTEXT": {
-                            "recent_messages": (
-                                state.get("recent_messages", [])[-8:]
-                                if use_routine_context
-                                else []
-                            ),
-                            "memories": (
-                                state.get("relevant_memories", [])[:10]
-                                if use_routine_context
-                                else []
-                            ),
-                            "conversation_summary_en": (
-                                state.get("conversation_summary", "")
-                                if use_routine_context
-                                else ""
-                            ),
-                        },
-                    }
-                ),
+                user_prompt=bounded_json(user_payload),
             )
+            token_usage = model_usage_update(state, result, ModelRole.ALFRED)
+            if _repeats_recent_answer(state, result.parsed.message):
+                revision_state = AgentState(**state)
+                revision_state["token_usage"] = token_usage
+                result = await gateway.invoke_structured(
+                    role=ModelRole.ALFRED,
+                    schema=AlfredIntervention,
+                    system_prompt=build_alfred_system_prompt(
+                        state.get("response_language", "en")
+                    ),
+                    user_prompt=bounded_json(
+                        {
+                            **user_payload,
+                            "REVISION_REQUIRED": {
+                                "reason": (
+                                    "The draft substantially repeats a recent "
+                                    "Alfred answer."
+                                ),
+                                "draft": result.parsed.message,
+                                "required_change": (
+                                    "Answer from a materially different and deeper "
+                                    "angle. Add useful information, distinctions, "
+                                    "or a focused question; do not paraphrase the "
+                                    "same recommendation."
+                                ),
+                            },
+                        }
+                    ),
+                )
+                token_usage = model_usage_update(
+                    revision_state,
+                    result,
+                    ModelRole.ALFRED,
+                )
             return traced_update(
                 state,
                 "gerar_intervencao_alfred",
                 alfred_intervention=result.parsed.model_dump(mode="json"),
                 summary_update=result.parsed.updated_summary_en,
-                token_usage=model_usage_update(state, result, ModelRole.ALFRED),
+                token_usage=token_usage,
             )
         except AIApplicationError as error:
             return traced_update(

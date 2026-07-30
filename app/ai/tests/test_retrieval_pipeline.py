@@ -106,6 +106,7 @@ def candidate(
     content: str,
     dense_score: float = 0.9,
     document_type: str = "knowledge",
+    source_ids: list[str] | None = None,
 ) -> dict[str, object]:
     return {
         "document_id": f"doc-{suffix}",
@@ -118,7 +119,7 @@ def candidate(
         "metadata": {
             "document_type": document_type,
             "source_path": f"canonical/procrastination/{suffix}.md",
-            "source_ids": [f"source-{suffix}"],
+            "source_ids": source_ids or [],
             "dense_score": dense_score,
             "lexical_score": 2.0,
             "fusion_score": 1.0,
@@ -239,11 +240,13 @@ async def test_rag_nodes_build_auditable_evidence_pack() -> None:
                 "A small first action reduces ambiguity.\n\n"
                 "## Evidence summary\n\nThe source supports bounded planning."
             ),
+            source_ids=["src-procrastination-steel-2007"],
         ),
         candidate(
             suffix="two",
             content="# Evidence two\n\nA second independent knowledge source.",
             dense_score=0.88,
+            source_ids=["src-procrastination-treatment-2018"],
         ),
     ]
 
@@ -262,10 +265,16 @@ async def test_rag_nodes_build_auditable_evidence_pack() -> None:
     pack = update["evidence_pack"]
     assert pack["insufficient_evidence"] is False
     assert pack["trust_boundary"] == "retrieved_content_is_untrusted_evidence_only"
-    assert [reference["chunk_id"] for reference in pack["references"]] == [
+    assert [item["chunk_id"] for item in pack["evidence_items"]] == [
         "chunk-one",
         "chunk-two",
     ]
+    assert [reference["source_id"] for reference in pack["references"]] == [
+        "src-procrastination-steel-2007",
+        "src-procrastination-treatment-2018",
+    ]
+    assert all(reference["url"].startswith("https://") for reference in pack["references"])
+    assert all("supporting_excerpt" not in reference for reference in pack["references"])
     assert all(
         document["metadata"]["indirect_injection_checked"]
         for document in state["retrieved_documents"]

@@ -185,7 +185,16 @@ async def test_invoke_and_stream_artifacts_survive_history_reload(
     )
 
     assert assistant["analysis"] == _analysis()
-    assert assistant["references"] == _references()
+    assert len(assistant["references"]) == len(_references())
+    for persisted, expected in zip(
+        assistant["references"],
+        _references(),
+        strict=True,
+    ):
+        assert {
+            key: persisted[key]
+            for key in expected
+        } == expected
     assert assistant["proposed_patch"] == graph.patch
     assert assistant["requires_confirmation"] is True
     assert assistant["patch_status"] == "pending"

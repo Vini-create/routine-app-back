@@ -20,6 +20,7 @@ from app.ai.models.gateway import (
     ModelRole,
     ModelSpec,
     SchemaT,
+    build_default_model_gateway,
 )
 from app.ai.schemas.alfred import AlfredIntervention
 from app.ai.schemas.analysis import (
@@ -155,7 +156,7 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
         gateway._client(ModelRole.CRITIC)
 
     by_model_role = dict(zip(ModelRole, created_clients, strict=True))
-    for role in (ModelRole.ROUTER, ModelRole.ALFRED, ModelRole.CRITIC):
+    for role in (ModelRole.ROUTER, ModelRole.CRITIC):
         assert by_model_role[role]["model"] == "gpt-4o-mini"
         assert by_model_role[role]["use_responses_api"] is False
         assert by_model_role[role]["top_p"] == 1.0
@@ -166,8 +167,15 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
 
     assert by_model_role[ModelRole.ROUTER]["temperature"] == 0.0
     assert by_model_role[ModelRole.ROUTER]["max_tokens"] == 400
+    assert by_model_role[ModelRole.ALFRED]["model"] == "gpt-4o-mini"
+    assert by_model_role[ModelRole.ALFRED]["use_responses_api"] is False
     assert by_model_role[ModelRole.ALFRED]["temperature"] == 0.3
     assert by_model_role[ModelRole.ALFRED]["max_tokens"] == 1_300
+    assert by_model_role[ModelRole.ALFRED]["top_p"] == 1.0
+    assert by_model_role[ModelRole.ALFRED]["frequency_penalty"] == 0.0
+    assert by_model_role[ModelRole.ALFRED]["presence_penalty"] == 0.0
+    assert "reasoning_effort" not in by_model_role[ModelRole.ALFRED]
+    assert "verbosity" not in by_model_role[ModelRole.ALFRED]
     assert by_model_role[ModelRole.CRITIC]["temperature"] == 0.0
     assert by_model_role[ModelRole.CRITIC]["max_tokens"] == 800
 
@@ -185,11 +193,34 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
         assert unsupported_parameter not in by_model_role[ModelRole.FEEDBACKER]
 
 
+def test_default_alfred_model_uses_the_cost_efficient_conversational_tier() -> None:
+    gateway = build_default_model_gateway()
+    spec = gateway._specs[ModelRole.ALFRED]
+
+    assert spec.model == "gpt-4o-mini"
+    assert spec.use_responses_api is False
+    assert spec.temperature == 0.3
+    assert spec.max_tokens == 1_300
+
+
 class FakeModelGateway:
-    def __init__(self, *, fail_role: ModelRole | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fail_role: ModelRole | None = None,
+        alfred_messages: list[str] | None = None,
+    ) -> None:
         self.calls: list[ModelRole] = []
         self.user_prompts: list[tuple[ModelRole, str]] = []
         self.fail_role = fail_role
+        self.alfred_messages = alfred_messages or [
+            (
+                "Antes de escolher uma ação, vale distinguir se o obstáculo é "
+                "carga excessiva, prioridade incerta ou falta de energia; cada "
+                "causa pede uma resposta diferente."
+            )
+        ]
+        self.alfred_call_count = 0
 
     async def invoke_structured(
         self,
@@ -219,13 +250,17 @@ class FakeModelGateway:
                 route_reason="Ambiguous request resolved as conversation.",
             )
         elif role is ModelRole.ALFRED:
+            message = self.alfred_messages[
+                min(self.alfred_call_count, len(self.alfred_messages) - 1)
+            ]
+            self.alfred_call_count += 1
             output = AlfredIntervention(
-                strategy="practical_next_step",
-                message="Vamos escolher uma ação pequena para esta semana.",
-                next_steps=["Escolher um hábito prioritário."],
-                memory_candidates=["Prefere começar com uma ação pequena."],
+                strategy="adaptive_conversation",
+                message=message,
+                next_steps=[],
+                memory_candidates=[],
                 updated_summary_en=(
-                    "The user wants a small practical action for this week."
+                    "The user is exploring which barrier is affecting execution."
                 ),
             )
         elif role is ModelRole.FEEDBACKER:
@@ -304,11 +339,44 @@ async def test_ambiguous_request_uses_router_then_alfred_only() -> None:
 
     assert gateway.calls == [ModelRole.ROUTER, ModelRole.ALFRED]
     assert result["route"] is InternalRoute.ALFRED
-    assert result["rendered_response"].startswith("Vamos escolher")
+    assert result["alfred_strategy"] == "adaptive_conversation"
+    assert result["alfred_plan"]["next_steps"] == []
+    assert "smallest" not in result["alfred_plan"]["objective"]
+    assert result["rendered_response"].startswith("Antes de escolher")
     assert result["token_usage"]["model_calls"] == 2
     assert result["token_usage"]["total_tokens"] == 250
-    assert result["summary_update"].startswith("The user wants")
+    assert result["summary_update"].startswith("The user is exploring")
     assert result["final_response"]["translation_applied"] is False
+
+
+@pytest.mark.asyncio
+async def test_repetitive_alfred_draft_is_rewritten_once() -> None:
+    repeated = "Escolha uma tarefa pequena e faça por dez minutos hoje."
+    gateway = FakeModelGateway(
+        alfred_messages=[
+            repeated,
+            (
+                "A procrastinação pode vir de aversão à tarefa, recompensa "
+                "distante ou critérios pouco claros. Identificar qual desses "
+                "mecanismos aparece no episódio muda a estratégia adequada."
+            ),
+        ]
+    )
+    request_state = state("O que mais pode explicar essa procrastinação?")
+    request_state["recent_messages"] = [
+        {"role": "assistant", "content": repeated},
+    ]
+
+    result = await invoke(request_state, gateway)
+
+    assert gateway.calls == [
+        ModelRole.ROUTER,
+        ModelRole.ALFRED,
+        ModelRole.ALFRED,
+    ]
+    assert "REVISION_REQUIRED" in gateway.user_prompts[-1][1]
+    assert result["rendered_response"].startswith("A procrastinação pode")
+    assert result["token_usage"]["model_calls"] == 3
 
 
 @pytest.mark.asyncio

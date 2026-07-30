@@ -27,6 +27,9 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
     assert "current `USER_INPUT` as the primary task" in alfred_prompt
     assert "Never replace a simple greeting" in alfred_prompt
     assert "do not recommend sleep" in alfred_prompt
+    assert "do not force every response into a next step" in alfred_prompt
+    assert "use recent assistant messages as a do-not-repeat list" in alfred_prompt
+    assert "for `evidence_explanation`, synthesize" in alfred_prompt
 
     feedbacker_prompt = " ".join(build_feedbacker_system_prompt("pt-BR").split())
     assert "every user-visible textual field in the requested response language" in feedbacker_prompt
