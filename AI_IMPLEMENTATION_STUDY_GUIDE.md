@@ -5948,3 +5948,54 @@ preservar o histórico já salvo.
 Testes adicionados cobrem a escolha de estratégia, ausência do viés de
 microação, uma única revisão antirrepetição, resolução do registro público,
 separação dos trechos internos e renderização compacta das fontes no frontend.
+
+## 13. Objetivo obrigatório antes da rotina ideal
+
+Uma rotina só pode ser considerada “ideal” em relação a algum objetivo. Sem
+essa referência, o modelo tende a produzir uma agenda genérica ou otimizar
+aspectos que não são prioridade para o usuário.
+
+O contexto já carregava as metas do banco, mas agora elas possuem um papel
+explícito no fluxo:
+
+```python
+active_goals = [
+    goal
+    for goal in goals
+    if goal["status"] in {"active", "in_progress"}
+]
+```
+
+Antes do roteamento principal, pedidos de criação de rotina são verificados:
+
+```text
+"Crie a rotina ideal para mim"
+  → objetivo não informado
+  → route = alfred
+  → strategy = clarify_routine_goal
+  → perguntar qual meta deve orientar a rotina
+
+"Crie uma rotina ideal para finalizar meu portfólio"
+  → objetivo explícito
+  → route = feedbacker
+  → continuar planejamento
+```
+
+Quando existem metas ativas, Alfred pode perguntar de forma contextual, por
+exemplo: “Você quer que essa rotina priorize Finalizar meu portfólio ou sua
+outra meta atual?”. Metas concluídas não são tratadas como candidatas atuais.
+Quando nenhuma meta ativa existe, ele pede o resultado desejado e, se útil, o
+horizonte de tempo.
+
+A regra é híbrida:
+
+- a detecção da falta de objetivo é determinística e não depende da LLM;
+- a pergunta é gerada por Alfred para permanecer natural e no idioma do usuário;
+- exatamente uma pergunta é permitida nessa etapa;
+- nenhuma rotina ou patch é produzido antes da resposta;
+- no turno seguinte, a resposta do usuário segue para `criar_plano`;
+- Alfred e Feedbacker recebem `active_goals` separadamente das demais metas.
+
+Os testes cobrem português, inglês, espanhol e francês, exclusão de metas
+concluídas, pergunta quando o objetivo está ausente, uso da meta ativa no prompt
+e avanço direto quando o objetivo já aparece na solicitação.

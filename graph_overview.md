@@ -164,7 +164,7 @@ flowchart TD
     %% =========================================================
 
     subgraph ROTEAMENTO["4. Roteamento e capacidade"]
-        N16[Node: classificar_intencao<br/>Registra route, capability,<br/>confiança, motivo e contexto exigido]
+        N16[Node: classificar_intencao<br/>Registra route, capability,<br/>confiança, motivo e contexto exigido;<br/>pede objetivo antes da rotina ideal]
         D2{route}
     end
 
@@ -221,7 +221,7 @@ flowchart TD
     %% =========================================================
 
     subgraph ALFRED["7. Capacidade conversational"]
-        A1[Node: selecionar_estrategia_alfred<br/>Escolhe estratégia pelo estado comportamental]
+        A1[Node: selecionar_estrategia_alfred<br/>Escolhe explicação, conversa,<br/>recuperação ou esclarecimento de objetivo]
         A2[Node: planejar_resposta_alfred<br/>Objetivo, tom, pontos e próximos passos]
         A3[Node: gerar_intervencao_alfred<br/>gpt-4o-mini; resposta estruturada<br/>+ revisão antirrepetição opcional<br/>+ updated_summary_en]
         A4[Node: renderizar_resposta_alfred<br/>Monta mensagem e candidatos de memória]
@@ -463,6 +463,13 @@ consultar_conhecimento
 `selected_skill` é uma pista. O input explícito tem precedência sobre uma pista
 conflitante.
 
+Em `criar_plano` e em pedidos automáticos de “rotina ideal”, o classificador
+verifica se o usuário informou o objetivo atual. Sem objetivo explícito, a rota
+vai primeiro para Alfred com `routine_goal_clarification`: as metas
+`in_progress` são apresentadas como opções e o modelo faz uma única pergunta
+antes de gerar qualquer rotina. Se o objetivo já estiver na mensagem, o fluxo
+segue diretamente para o planejamento.
+
 ```mermaid
 flowchart LR
     I[Input + selected_skill] --> L[Classificador local]
@@ -490,6 +497,7 @@ Resumo     → máximo de 1000 caracteres
 Contexto entregue aos modelos:
 
 - perfil, metas, hábitos e itens de rotina estruturados;
+- `active_goals` (`in_progress`) em destaque para alinhar planos e rotinas;
 - métricas, tendências, anomalias e risco calculados por código;
 - até oito mensagens recentes da conversa atual;
 - resumo contínuo anterior;

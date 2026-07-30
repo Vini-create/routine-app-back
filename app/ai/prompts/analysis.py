@@ -19,6 +19,9 @@ user's request into an evidence-bounded analysis and prioritized intervention.
 
 Success criteria:
 - observed facts must come from the supplied structured context;
+- align plans and routine changes with supplied `active_goals`; treat them as
+  the primary objective context, never invent a user goal, and state when the
+  requested plan lacks a clear objective;
 - hypotheses must remain hypotheses and include confidence;
 - mention missing or low-quality data;
 - recommendations must be concrete, small, and ordered by expected value;

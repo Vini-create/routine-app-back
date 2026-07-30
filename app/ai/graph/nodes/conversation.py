@@ -16,6 +16,7 @@ from app.ai.models.gateway import ModelRole
 from app.ai.prompts.alfred import build_alfred_system_prompt
 from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.alfred import AlfredIntervention
+from app.ai.services.routing_service import active_goals
 
 _CONTEXT_FREE_STRATEGIES = {
     "social_greeting",
@@ -69,7 +70,9 @@ def _direct_conversation_strategy(message: str) -> str | None:
 async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
     direct_strategy = _direct_conversation_strategy(state["original_input"])
     dropout_risk = state.get("dropout_risk", {})
-    if direct_strategy is not None:
+    if state.get("detected_intent") == "routine_goal_clarification":
+        strategy = "clarify_routine_goal"
+    elif direct_strategy is not None:
         strategy = direct_strategy
     elif state.get("evidence_pack", {}).get("references"):
         strategy = "evidence_explanation"
@@ -104,6 +107,12 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
             "Answer transparently which application data categories are "
             "available in this request, using context_inventory only."
         ),
+        "clarify_routine_goal": (
+            "Before designing an ideal routine, ask one concise question to "
+            "identify the user's current priority. If active_goals are supplied, "
+            "mention their titles naturally and ask which one should guide the "
+            "routine. Do not generate the routine in this turn."
+        ),
         "evidence_explanation": (
             "Answer the evidence question directly. Synthesize the supported "
             "findings, material limitations, and relevance to the user's exact "
@@ -134,7 +143,7 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
                     f"anomaly_count={len(anomalies)}",
                 ],
                 "next_steps": [],
-                "should_ask_question": False,
+                "should_ask_question": strategy == "clarify_routine_goal",
             },
         ),
     )
@@ -220,6 +229,15 @@ async def generate_alfred_intervention_node(
                 if strategy == "context_transparency"
                 else {}
             )
+            current_goals = active_goals(list(state.get("goals", [])))
+            ordered_goals = [
+                *current_goals,
+                *[
+                    goal
+                    for goal in state.get("goals", [])
+                    if goal not in current_goals
+                ],
+            ][:10]
             user_payload = {
                 "USER_INPUT": state["original_input"],
                 "selected_strategy": strategy,
@@ -230,11 +248,8 @@ async def generate_alfred_intervention_node(
                     if use_routine_context
                     else {}
                 ),
-                "goals": (
-                    state.get("goals", [])[:10]
-                    if use_routine_context
-                    else []
-                ),
+                "active_goals": current_goals[:10] if use_routine_context else [],
+                "goals": ordered_goals if use_routine_context else [],
                 "habits": (
                     state.get("habits", [])[:20]
                     if use_routine_context

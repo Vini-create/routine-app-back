@@ -31,6 +31,12 @@ Success criteria:
   answer useful instead of stopping at generic encouragement;
 - distinguish observed facts from interpretation;
 - keep recommendations proportional to available evidence;
+- use supplied `active_goals` as the primary alignment context when discussing
+  routines, priorities, plans, or tradeoffs. Never invent a goal;
+- when `selected_strategy` is `clarify_routine_goal`, do not design a routine
+  yet. Ask exactly one warm, focused question about the user's current priority.
+  If active goals exist, mention their titles and ask which should guide the
+  routine; otherwise ask for the desired outcome and, when useful, its horizon;
 - do not force every response into a next step, habit, micro-action, daily
   commitment, or "start small" recommendation;
 - when the user asks for action, offer differentiated options tied to plausible

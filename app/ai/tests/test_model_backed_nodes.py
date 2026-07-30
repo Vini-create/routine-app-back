@@ -350,6 +350,52 @@ async def test_ambiguous_request_uses_router_then_alfred_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ideal_routine_asks_which_active_goal_should_guide_it() -> None:
+    gateway = FakeModelGateway()
+    request_state = state("Crie a rotina ideal para mim.")
+    request_state["selected_skill"] = SelectedSkill.CRIAR_PLANO
+    request_state["goals"] = [
+        {
+            "id": "goal-active",
+            "title": "Finalizar meu portfólio",
+            "priority": 1,
+            "status": "in_progress",
+        },
+        {
+            "id": "goal-finished",
+            "title": "Meta concluída",
+            "priority": 2,
+            "status": "achieved",
+        },
+    ]
+
+    result = await invoke(request_state, gateway)
+
+    assert gateway.calls == [ModelRole.ALFRED]
+    assert result["route"] is InternalRoute.ALFRED
+    assert result["detected_intent"] == "routine_goal_clarification"
+    assert result["alfred_strategy"] == "clarify_routine_goal"
+    assert result["alfred_plan"]["should_ask_question"] is True
+    alfred_prompt = gateway.user_prompts[0][1]
+    assert '"active_goals":[{"id":"goal-active"' in alfred_prompt
+    assert "Finalizar meu portfólio" in alfred_prompt
+
+
+@pytest.mark.asyncio
+async def test_ideal_routine_with_explicit_objective_reaches_planning() -> None:
+    gateway = FakeModelGateway()
+    request_state = state(
+        "Crie uma rotina ideal para eu finalizar meu portfólio."
+    )
+    request_state["selected_skill"] = SelectedSkill.CRIAR_PLANO
+
+    result = await invoke(request_state, gateway)
+
+    assert result["route"] is InternalRoute.FEEDBACKER
+    assert gateway.calls == [ModelRole.FEEDBACKER, ModelRole.CRITIC]
+
+
+@pytest.mark.asyncio
 async def test_repetitive_alfred_draft_is_rewritten_once() -> None:
     repeated = "Escolha uma tarefa pequena e faça por dez minutos hoje."
     gateway = FakeModelGateway(

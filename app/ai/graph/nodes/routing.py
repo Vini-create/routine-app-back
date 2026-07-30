@@ -19,6 +19,7 @@ from app.ai.prompts.payloads import bounded_json
 from app.ai.prompts.routing import build_routing_system_prompt
 from app.ai.schemas.routing import RoutingDecision
 from app.ai.services.routing_service import classify_route
+from app.ai.services.routing_service import needs_routine_goal_clarification
 
 
 async def classify_intent_node(
@@ -41,16 +42,28 @@ async def classify_intent_node(
         reason = state.get("route_reason", "Route supplied by the trusted caller.")
         required_context = list(state.get("required_context", []))
     else:
-        decision = classify_route(
-            state.get("normalized_input", state["original_input"]),
+        normalized_input = state.get("normalized_input", state["original_input"])
+        clarify_routine_goal = needs_routine_goal_clarification(
+            normalized_input,
             normalized_skill,
+            list(state.get("goals", [])),
         )
+        decision = classify_route(normalized_input, normalized_skill)
         model_gateway = (
             runtime.context.model_gateway
             if runtime is not None and runtime.context is not None
             else None
         )
-        if decision.needs_model and model_gateway is not None:
+        if clarify_routine_goal:
+            route = InternalRoute.ALFRED
+            detected_intent = "routine_goal_clarification"
+            confidence = 0.98
+            route_confidence = 0.98
+            reason = (
+                "An ideal routine needs a current objective before planning."
+            )
+            required_context = ["active_goals"]
+        elif decision.needs_model and model_gateway is not None:
             try:
                 result = await model_gateway.invoke_structured(
                     role=ModelRole.ROUTER,

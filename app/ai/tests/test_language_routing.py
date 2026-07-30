@@ -16,7 +16,11 @@ from app.ai.services.language_service import (
     detect_language,
     resolve_response_language,
 )
-from app.ai.services.routing_service import classify_route
+from app.ai.services.routing_service import (
+    active_goals,
+    classify_route,
+    needs_routine_goal_clarification,
+)
 
 
 @pytest.mark.parametrize(
@@ -147,6 +151,50 @@ def test_ambiguous_conversation_is_the_only_case_reserved_for_model_routing() ->
 
     assert decision.route is InternalRoute.ALFRED
     assert decision.needs_model is True
+
+
+def test_active_goals_exclude_finished_goal_context() -> None:
+    goals = [
+        {"title": "Passar no concurso", "status": "in_progress"},
+        {"title": "Projeto encerrado", "status": "achieved"},
+    ]
+
+    assert active_goals(goals) == [goals[0]]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Crie a rotina ideal para mim.",
+        "Build my ideal routine.",
+        "Crea una rutina ideal para mí.",
+        "Crée ma routine idéale.",
+    ],
+)
+def test_ideal_routine_requires_a_current_goal(message: str) -> None:
+    assert needs_routine_goal_clarification(
+        message,
+        SelectedSkill.AUTO,
+        [{"title": "Passar no concurso", "status": "in_progress"}],
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Crie uma rotina ideal para passar no concurso.",
+        "Meu objetivo é ganhar condicionamento; crie a rotina ideal.",
+        "Build my ideal routine to finish my portfolio.",
+    ],
+)
+def test_explicit_routine_objective_does_not_trigger_redundant_question(
+    message: str,
+) -> None:
+    assert not needs_routine_goal_clarification(
+        message,
+        SelectedSkill.CRIAR_PLANO,
+        [{"title": "Passar no concurso", "status": "in_progress"}],
+    )
 
 
 def _state(message: str) -> AgentState:

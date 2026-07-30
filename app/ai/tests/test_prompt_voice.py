@@ -30,10 +30,13 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
     assert "do not force every response into a next step" in alfred_prompt
     assert "use recent assistant messages as a do-not-repeat list" in alfred_prompt
     assert "for `evidence_explanation`, synthesize" in alfred_prompt
+    assert "use supplied `active_goals` as the primary alignment context" in alfred_prompt
+    assert "`clarify_routine_goal`" in alfred_prompt
 
     feedbacker_prompt = " ".join(build_feedbacker_system_prompt("pt-BR").split())
     assert "every user-visible textual field in the requested response language" in feedbacker_prompt
     assert "`updated_summary_en` is the sole English-only field" in feedbacker_prompt
+    assert "align plans and routine changes with supplied `active_goals`" in feedbacker_prompt
 
 
 def test_router_remains_small_and_never_writes_user_facing_prose() -> None:

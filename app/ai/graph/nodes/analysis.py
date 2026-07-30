@@ -13,6 +13,7 @@ from app.ai.models.gateway import ModelRole
 from app.ai.prompts.analysis import build_feedbacker_system_prompt
 from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.analysis import AnalysisSynthesis
+from app.ai.services.routing_service import active_goals
 
 
 def _analysis_language(state: AgentState) -> str:
@@ -177,6 +178,9 @@ async def generate_hypotheses_node(
                             [],
                         ),
                         "behavioral_state": state.get("behavioral_state", {}),
+                        "active_goals": active_goals(
+                            list(state.get("goals", []))
+                        )[:20],
                         "goals": state.get("goals", [])[:20],
                         "habits": state.get("habits", [])[:30],
                         "routines": state.get("routines", [])[:30],

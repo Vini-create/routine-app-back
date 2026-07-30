@@ -57,6 +57,26 @@ _KNOWLEDGE_PATTERNS = _compiled(
     r"\b(?:que dit|selon)\b.{0,25}\b(?:la science|la recherche|les etudes)\b",
 )
 
+_IDEAL_ROUTINE_PATTERNS = _compiled(
+    r"\b(?:rotina|routine|rutina)\b.{0,45}\b(?:ideal|perfeit[ao]|"
+    r"personalizad[ao]|otim[ao]|perfect|personalized|optimal|ideale|"
+    r"personnalisee)\b",
+    r"\b(?:ideal|perfeit[ao]|personalizad[ao]|otim[ao]|perfect|"
+    r"personalized|optimal|ideale|personnalisee)\b.{0,45}\b"
+    r"(?:rotina|routine|rutina)\b",
+    r"\b(?:crie|criar|monte|montar|faca|organize|planeje|create|build|"
+    r"make|design|crea|crear|construye|cree|creer|construis)\b.{0,45}\b"
+    r"(?:rotina|routine|rutina)\b",
+)
+_EXPLICIT_OBJECTIVE_PATTERNS = _compiled(
+    r"\b(?:meu|minha|my|mi|mon|ma)\s+(?:objetivo|meta|foco|prioridade|"
+    r"goal|target|focus|objetivo|objectif|priorite)\b.{0,30}\b"
+    r"(?:e|is|es|est|:)",
+    r"\b(?:objetivo|meta|foco|prioridade|goal|target|focus|objectif|"
+    r"priorite)\b\s*[:=-]\s*\w+",
+    r"\b(?:para|to|for|pour)\s+(?!(?:mim|me|mi|moi)\b)\w+",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class DeterministicRoutingDecision:
@@ -69,6 +89,47 @@ class DeterministicRoutingDecision:
 
 def _matches(patterns: tuple[re.Pattern[str], ...], value: str) -> bool:
     return any(pattern.search(value) for pattern in patterns)
+
+
+def active_goals(goals: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return goals that can still guide a new plan, preserving priority order."""
+
+    return [
+        goal
+        for goal in goals
+        if str(goal.get("status", "")).casefold() in {"active", "in_progress"}
+    ]
+
+
+def needs_routine_goal_clarification(
+    message: str,
+    selected_skill: SelectedSkill,
+    goals: list[dict[str, object]],
+) -> bool:
+    """Require an objective before generating a personalized ideal routine."""
+
+    canonical = _canonical(message)
+    mentions_routine = bool(re.search(r"\b(?:rotina|routine|rutina)\b", canonical))
+    asks_for_routine = _matches(_IDEAL_ROUTINE_PATTERNS, canonical) or (
+        selected_skill is SelectedSkill.CRIAR_PLANO and mentions_routine
+    )
+    if not asks_for_routine:
+        return False
+
+    current_goals = active_goals(goals)
+    references_known_goal = any(
+        (title := _canonical(str(goal.get("title", ""))))
+        and len(title) >= 4
+        and title in canonical
+        for goal in current_goals
+    )
+    states_objective = _matches(_EXPLICIT_OBJECTIVE_PATTERNS, canonical)
+    if references_known_goal or states_objective:
+        return False
+
+    # The wording is explicit enough to protect both automatic and manually
+    # selected flows from generating an ungrounded routine.
+    return True
 
 
 def classify_route(
