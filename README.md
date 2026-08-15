@@ -1,10 +1,9 @@
 # Winperium backend
 
-## Integração do frontend com Alfred
+## Arquitetura do Alfred
 
-O contrato completo das 11 rotas públicas de IA, tipos TypeScript, streaming
-SSE, conversas, quotas, erros e confirmação de patches está em
-[`FRONTEND_AI_INTEGRATION_GUIDE.md`](FRONTEND_AI_INTEGRATION_GUIDE.md).
+O grafo atual, suas rotas, validações e fluxos de confirmação estão descritos
+em [`graph_overview.md`](graph_overview.md).
 
 ## Autenticação Google
 
