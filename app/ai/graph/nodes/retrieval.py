@@ -73,6 +73,9 @@ TOPIC_PATTERNS = {
 MIN_RETRIEVAL_CONFIDENCE = 0.52
 MIN_UNSCOPED_RETRIEVAL_CONFIDENCE = 0.58
 MIN_RETRIEVAL_COVERAGE = 0.45
+SOURCE_FOLLOW_UP = re.compile(
+    r"\b(?:fontes?|referencias?|evidencias?|sources?|references?|fuentes?)\b"
+)
 
 
 def _clamp(value: float) -> float:
@@ -128,11 +131,20 @@ def _retrieval_topics(state: AgentState) -> list[str]:
 def _build_query(state: AgentState) -> str:
     original = state.get("normalized_input", state["original_input"]).strip()
     topics = _retrieval_topics(state)
+    query_subject = original
+    if SOURCE_FOLLOW_UP.search(_fold_topic_text(original)):
+        for message in reversed(state.get("recent_messages", [])):
+            if not isinstance(message, Mapping) or message.get("role") != "user":
+                continue
+            candidate = str(message.get("content", "")).strip()
+            if candidate and not SOURCE_FOLLOW_UP.search(_fold_topic_text(candidate)):
+                query_subject = candidate
+                break
     # The query embedding consumes the original language. Canonical topic IDs
     # make referential follow-ups ("sources for that?") traceable to the recent
     # conversation without translating user content or inventing facts.
     suffix = f"\nRelevant topics: {', '.join(topics)}" if topics else ""
-    return f"{original}{suffix}"[:2_000].strip()
+    return f"{query_subject}{suffix}"[:2_000].strip()
 
 
 def _rerank_document(

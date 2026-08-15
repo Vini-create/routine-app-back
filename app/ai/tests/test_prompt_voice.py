@@ -19,6 +19,7 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
         assert "Alfred's voice:" in normalized
         assert "kind, attentive and capable companion" in normalized
         assert "Keep warmth compact" in normalized
+        assert "warm, engaged energy" in normalized
         assert "canned praise or automatic validation" in normalized
         assert "Security and authority:" in prompt
         assert f"Prompt version: {PROMPT_VERSION}" in prompt
@@ -30,6 +31,8 @@ def test_user_facing_model_prompts_share_alfreds_friendlier_voice() -> None:
     assert "do not force every response into a next step" in alfred_prompt
     assert "use recent assistant messages as a do-not-repeat list" in alfred_prompt
     assert "for `evidence_explanation`, synthesize" in alfred_prompt
+    assert "when `editorial_phrase` is supplied" in alfred_prompt
+    assert "genuinely pleased to help" in alfred_prompt
     assert "use supplied `active_goals` as the primary alignment context" in alfred_prompt
     assert "`clarify_routine_goal`" in alfred_prompt
 

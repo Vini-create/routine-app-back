@@ -90,6 +90,7 @@ class AgentState(TypedDict):
     retrieval_coverage: NotRequired[float]
     insufficient_evidence: NotRequired[bool]
     evidence_pack: NotRequired[dict[str, Any]]
+    editorial_phrase: NotRequired[dict[str, str] | None]
 
     # Conversational capability
     alfred_strategy: NotRequired[str]

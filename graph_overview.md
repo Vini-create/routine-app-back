@@ -221,7 +221,7 @@ flowchart TD
     %% =========================================================
 
     subgraph ALFRED["7. Capacidade conversational"]
-        A1[Node: selecionar_estrategia_alfred<br/>Escolhe explicação, conversa,<br/>recuperação ou esclarecimento de objetivo]
+        A1[Node: selecionar_estrategia_alfred<br/>Escolhe explicação, conversa,<br/>recuperação ou esclarecimento de objetivo<br/>+ recupera frase editorial motivacional opcional]
         A2[Node: planejar_resposta_alfred<br/>Objetivo, tom, pontos e próximos passos]
         A3[Node: gerar_intervencao_alfred<br/>gpt-4o-mini; resposta estruturada<br/>+ revisão antirrepetição opcional<br/>+ updated_summary_en]
         A4[Node: renderizar_resposta_alfred<br/>Monta mensagem e candidatos de memória]
@@ -503,6 +503,8 @@ Contexto entregue aos modelos:
 - resumo contínuo anterior;
 - memórias gerais relevantes;
 - evidence pack quando a rota usa RAG;
+- no máximo uma frase editorial própria e localizada quando o pedido é
+  explicitamente motivacional, separada das evidências científicas;
 - quatro decisões recentes somente no Feedbacker.
 
 Mensagens, feedbacks, memórias e documentos recuperados ficam sob
@@ -572,6 +574,8 @@ Nesta versão de portfólio, o orquestrador e o PatchService não criam
 - Conteúdo do frontend não escolhe diretamente uma rota interna privilegiada.
 - Router, Alfred, Feedbacker e crítico retornam Structured Outputs.
 - RAG usa corpus local e referências; não navega livremente na internet.
+- Frases editoriais não são apresentadas como ciência ou citação externa e não
+  consomem a quota de pesquisa com referências.
 - Nenhum patch é aplicado na primeira resposta.
 - Todo patch é revalidado contra ownership e schemas antes de escrita.
 - Aceite/rejeição, auditoria, memória de decisão e resolução de checkpoint são

@@ -12,6 +12,7 @@ from app.ai.models.gateway import (
     ModelSpec,
 )
 from app.ai.prompts.alfred import build_alfred_system_prompt
+from app.ai.retrieval.editorial_phrases import retrieve_motivational_phrase
 from app.ai.schemas.alfred import AlfredIntervention
 from app.core.config import settings
 
@@ -68,6 +69,11 @@ async def _run(message: str, model: str, language: str) -> None:
         timeout_seconds=settings.ai_model_timeout_seconds,
         max_retries=settings.ai_model_max_retries,
     )
+    editorial_phrase = retrieve_motivational_phrase(
+        message,
+        response_language=language,
+        recent_assistant_messages=[],
+    )
     payload = {
         "USER_INPUT": message,
         "selected_strategy": "adaptive_conversation",
@@ -83,9 +89,11 @@ async def _run(message: str, model: str, language: str) -> None:
         },
         "context_inventory": {},
         "behavioral_state": {},
+        "active_goals": [],
         "goals": [],
         "habits": [],
         "evidence_pack": {},
+        "editorial_phrase": editorial_phrase,
         "UNTRUSTED_CONTEXT": {
             "recent_messages": [],
             "memories": [],

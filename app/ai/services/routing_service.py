@@ -28,6 +28,16 @@ _DETERMINISTIC_PATTERNS = _compiled(
     r"\b(?:completion rate|active habits?|current streak)\b",
     r"\bcuantos?\b.{0,45}\b(?:habitos?|metas?|tareas?)\b",
     r"\b(?:taux de completion|combien)\b.{0,45}\b(?:habitudes?|objectifs?)?\b",
+    r"\b(?:quais|liste|listar|mostre|mostra)\b.{0,55}\b(?:tarefas?|atividades?|agenda|programacao|rotina)\b",
+    r"\b(?:o que|que)\b.{0,25}\b(?:tenho|esta programado|esta agendado)\b.{0,35}\b(?:hoje|amanha|dia|semana)?\b",
+    r"\b(?:what|which|list|show)\b.{0,45}\b(?:tasks?|activities|schedule)\b",
+    r"\b(?:cuales|lista|muestra)\b.{0,45}\b(?:tareas?|actividades|agenda)\b",
+)
+
+_PATCH_REQUEST_PATTERNS = _compiled(
+    r"\b(?:mude|altere|ajuste|reorganize|remarque|troque|reduza|aumente|adicione)\b.{0,75}\b(?:rotina|tarefa|atividade|habito|meta|horario|duracao|prioridade)\b",
+    r"\b(?:change|update|adjust|reschedule|reduce|increase)\b.{0,75}\b(?:routine|task|habit|goal|time|duration|priority)\b",
+    r"\b(?:cambia|ajusta|reprograma|reduce|aumenta)\b.{0,75}\b(?:rutina|tarea|habito|meta|hora|duracion)\b",
 )
 
 _ANALYTICAL_PATTERNS = _compiled(
@@ -91,6 +101,12 @@ def _matches(patterns: tuple[re.Pattern[str], ...], value: str) -> bool:
     return any(pattern.search(value) for pattern in patterns)
 
 
+def is_explicit_patch_request(message: str) -> bool:
+    """Identify an explicit request to change existing application data."""
+
+    return _matches(_PATCH_REQUEST_PATTERNS, _canonical(message))
+
+
 def active_goals(goals: list[dict[str, object]]) -> list[dict[str, object]]:
     """Return goals that can still guide a new plan, preserving priority order."""
 
@@ -142,6 +158,7 @@ def classify_route(
     deterministic = _matches(_DETERMINISTIC_PATTERNS, canonical)
     analytical = _matches(_ANALYTICAL_PATTERNS, canonical)
     knowledge = _matches(_KNOWLEDGE_PATTERNS, canonical)
+    patch_request = is_explicit_patch_request(message)
 
     if knowledge and analytical:
         return DeterministicRoutingDecision(
@@ -175,6 +192,14 @@ def classify_route(
             "simple_user_data_query",
             0.95,
             "The request can be answered from structured user data.",
+            False,
+        )
+    if patch_request:
+        return DeterministicRoutingDecision(
+            InternalRoute.FEEDBACKER,
+            "routine_change_request",
+            0.96,
+            "The user explicitly requested a change to owned routine data.",
             False,
         )
     if analytical:

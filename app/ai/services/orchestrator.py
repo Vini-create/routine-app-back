@@ -38,7 +38,10 @@ from app.ai.retrieval.runtime import build_default_knowledge_retriever
 from app.ai.schemas.requests import AIInvokeRequest
 from app.ai.schemas.responses import AIInvokeResponse, AIUsage
 from app.ai.schemas.routing import RoutingDecision
-from app.ai.services.routing_service import classify_route
+from app.ai.services.routing_service import (
+    classify_route,
+    needs_routine_goal_clarification,
+)
 from app.ai.services.usage_service import (
     confirm_ai_usage,
     fail_ai_usage,
@@ -154,7 +157,23 @@ class AIOrchestrator:
         if injection.suspected or personal_safety.blocked:
             return InternalRoute.SAFE_RESPONSE
 
+        if needs_routine_goal_clarification(
+            payload.message,
+            payload.selected_skill,
+            [],
+        ):
+            state["detected_intent"] = "routine_goal_clarification"
+            state["intent_confidence"] = 0.98
+            state["route_confidence"] = 0.98
+            state["route_reason"] = "An ideal routine needs a current objective."
+            state["required_context"] = ["active_goals"]
+            return InternalRoute.ALFRED
+
         decision = classify_route(payload.message, payload.selected_skill)
+        state["detected_intent"] = decision.detected_intent
+        state["intent_confidence"] = decision.confidence
+        state["route_confidence"] = decision.confidence
+        state["route_reason"] = decision.reason
         if not decision.needs_model:
             return decision.route
         try:

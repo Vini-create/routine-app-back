@@ -100,6 +100,16 @@ def test_explicit_short_greetings_do_not_receive_an_ambiguous_language_guess(
             SelectedSkill.AUTO,
             InternalRoute.RAG_THEN_FEEDBACKER,
         ),
+        (
+            "Quais são essas 7 tarefas?",
+            SelectedSkill.AUTO,
+            InternalRoute.DETERMINISTIC,
+        ),
+        (
+            "Mude o horário da tarefa Estudar para 19h.",
+            SelectedSkill.AUTO,
+            InternalRoute.FEEDBACKER,
+        ),
     ],
 )
 def test_canonical_route_examples(

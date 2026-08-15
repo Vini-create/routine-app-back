@@ -5999,3 +5999,78 @@ A regra é híbrida:
 Os testes cobrem português, inglês, espanhol e francês, exclusão de metas
 concluídas, pergunta quando o objetivo está ausente, uso da meta ativa no prompt
 e avanço direto quando o objetivo já aparece na solicitação.
+
+## 14. Fontes em follow-up, agenda nominal e patches no modo Automático
+
+Três falhas de comportamento tinham causas diferentes no fluxo, não no modelo.
+
+Perguntas como “qual fonte você usou?” são referenciais. Usar somente essa frase
+como consulta semântica perde o assunto pesquisado. O construtor de consulta
+agora recupera a última pergunta substantiva do usuário e preserva os tópicos:
+
+```text
+"Como melhorar minha constância?"
+"Quais fontes você usou?"
+  → query: "Como melhorar minha constância?\nRelevant topics: habits"
+```
+
+Se a recuperação não atingir os limites de confiança e cobertura, Alfred entra
+na estratégia de explicação de evidência e informa a insuficiência; ele não pode
+alegar que consultou uma fonte inexistente. Quando há referências públicas, o
+frontend as deixa abertas por padrão e continua mostrando somente título,
+autoria, ano e link.
+
+Listar a agenda não exige LLM. `scheduled_occurrences()` expande hábitos e itens
+de rotina para uma data no fuso do usuário, cruza os logs e devolve ocorrências
+ordenadas. Assim, “Quais são essas 7 tarefas?” responde com nomes, horário,
+duração e status reais, e não apenas com o total. Datas ISO, `DD/MM/AAAA`, hoje,
+amanhã e ontem são aceitas.
+
+Por fim, pedidos explícitos de alteração no modo `auto` agora são classificados
+como `routine_change_request` e enviados ao Feedbacker. O prompt recebe a lista
+de campos editáveis e pode produzir no máximo um patch quando entidade e novo
+valor forem inequívocos. Se faltar qualquer um deles, faz uma pergunta em vez de
+inventar. Toda proposta continua passando por ownership, allowlist, schema,
+simulação e confirmação humana antes de qualquer escrita.
+
+Validação executada nesta alteração:
+
+```text
+249 testes unitários do grafo aprovados
+Ruff aprovado nos arquivos alterados
+teste do componente de fontes e ESLint aprovados no frontend
+```
+
+Os testes HTTP dependentes de PostgreSQL não puderam rodar nesta máquina porque
+não havia servidor em `127.0.0.1:5432`; a falha ocorreu no setup da fixture,
+antes de executar código da aplicação.
+
+## 15. Recuperação editorial para respostas motivacionais
+
+O arquivo histórico continha citações atribuídas a autores conhecidos, mas elas
+continuam fora de produção porque ainda exigem revisão humana de atribuição. Em
+vez de diminuir essa barreira, foi criado um pequeno acervo de frases originais
+do Alfred, localizado nos quatro idiomas do produto.
+
+```text
+pedido explicitamente motivacional
+  → detectar temas da mensagem
+  → recuperar uma frase editorial compatível
+  → excluir frases presentes nas respostas recentes
+  → fornecer no máximo uma frase ao prompt do Alfred
+```
+
+Essa recuperação é local e determinística: não chama outra LLM, não usa embedding
+remoto e não consome a cota de pesquisa científica. A frase chega separada do
+`evidence_pack`, marcada com `origin=alfred_editorial`, portanto nunca deve ser
+apresentada como estudo, citação externa ou fala de um autor.
+
+O modelo pode integrá-la somente quando o usuário pede motivação ou incentivo.
+Pedidos factuais, momentos de crise e dificuldades concretas que exigem escuta
+não recebem uma frase automaticamente. Isso evita que simpatia vire positividade
+forçada.
+
+A voz compartilhada também passou a pedir energia mais presente e expressiva em
+conversas comuns, celebração específica quando existe progresso real e redução
+deliberada dessa energia quando o usuário está frustrado ou vulnerável. A versão
+dos prompts foi atualizada para `2026-08-14.v4`.

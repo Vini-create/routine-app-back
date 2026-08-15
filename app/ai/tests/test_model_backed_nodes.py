@@ -384,9 +384,7 @@ async def test_ideal_routine_asks_which_active_goal_should_guide_it() -> None:
 @pytest.mark.asyncio
 async def test_ideal_routine_with_explicit_objective_reaches_planning() -> None:
     gateway = FakeModelGateway()
-    request_state = state(
-        "Crie uma rotina ideal para eu finalizar meu portfólio."
-    )
+    request_state = state("Crie uma rotina ideal para eu finalizar meu portfólio.")
     request_state["selected_skill"] = SelectedSkill.CRIAR_PLANO
 
     result = await invoke(request_state, gateway)
@@ -461,9 +459,7 @@ async def test_direct_conversation_never_becomes_unrelated_routine_advice(
 
     assert result["alfred_strategy"] == expected_strategy
     alfred_prompt = next(
-        prompt
-        for role, prompt in gateway.user_prompts
-        if role is ModelRole.ALFRED
+        prompt for role, prompt in gateway.user_prompts if role is ModelRole.ALFRED
     )
     assert f'"selected_strategy":"{expected_strategy}"' in alfred_prompt
     assert '"behavioral_state":{}' in alfred_prompt
@@ -506,6 +502,23 @@ async def test_obvious_deep_analysis_uses_feedbacker_and_critic_models() -> None
 
 
 @pytest.mark.asyncio
+async def test_motivational_request_supplies_one_editorial_phrase_to_alfred() -> None:
+    gateway = FakeModelGateway()
+    result = await invoke(
+        state("Estou desanimado com minha meta; pode me motivar?"),
+        gateway,
+    )
+
+    assert result["route"] is InternalRoute.ALFRED
+    assert result["editorial_phrase"]["origin"] == "alfred_editorial"
+    alfred_prompt = next(
+        prompt for role, prompt in gateway.user_prompts if role is ModelRole.ALFRED
+    )
+    assert '"origin":"alfred_editorial"' in alfred_prompt
+    assert result["editorial_phrase"]["text"] in alfred_prompt
+
+
+@pytest.mark.asyncio
 async def test_decision_memory_is_sent_only_to_feedbacker() -> None:
     decision_memory = {
         "type": "routine_item:start_at",
@@ -531,9 +544,7 @@ async def test_decision_memory_is_sent_only_to_feedbacker() -> None:
     assert "feedbacker_decision_memories" not in alfred_prompt
     assert "I cannot study before 08:00." not in alfred_prompt
 
-    feedbacker_state = state(
-        "Analise profundamente meus últimos 30 dias de rotina."
-    )
+    feedbacker_state = state("Analise profundamente meus últimos 30 dias de rotina.")
     feedbacker_state["conversation_summary"] = "The user is reviewing consistency."
     feedbacker_state["feedbacker_decision_memories"] = [decision_memory]
     feedbacker_gateway = FakeModelGateway()

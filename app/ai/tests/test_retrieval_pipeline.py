@@ -224,6 +224,10 @@ async def test_referential_follow_up_inherits_topic_from_recent_context() -> Non
 
     assert update["retrieval_topics"] == ["procrastination"]
     assert "Relevant topics: procrastination" in update["retrieval_query"]
+    assert update["retrieval_query"].startswith(
+        "Como acabar com a procrastinação?"
+    )
+    assert "Tem alguma referência relacionada?" not in update["retrieval_query"]
 
 
 @pytest.mark.asyncio

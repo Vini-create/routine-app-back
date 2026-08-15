@@ -152,9 +152,34 @@ def _entity_occurrences(
                     "date": occurrence_date,
                     "status": status,
                     "duration_minutes": max(0, int(item["duration_minutes"])),
+                    "start_time": local_start.strftime("%H:%M"),
                 }
             )
     return occurrences, invalid_rules
+
+
+def scheduled_occurrences(
+    context: dict[str, Any],
+    *,
+    target_date: date,
+) -> list[dict[str, Any]]:
+    """List the user's actual scheduled entities for one local calendar day."""
+
+    user_timezone = _safe_timezone(context.get("profile", {}).get("timezone"))
+    occurrences, _ = _entity_occurrences(
+        context,
+        range_start=target_date,
+        range_end=target_date,
+        user_timezone=user_timezone,
+    )
+    return sorted(
+        occurrences,
+        key=lambda item: (
+            item.get("start_time") is None,
+            item.get("start_time") or "",
+            item["name"].casefold(),
+        ),
+    )
 
 
 def _completion_rate(completed: int, expected: int) -> float | None:

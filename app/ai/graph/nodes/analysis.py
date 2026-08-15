@@ -13,7 +13,7 @@ from app.ai.models.gateway import ModelRole
 from app.ai.prompts.analysis import build_feedbacker_system_prompt
 from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.analysis import AnalysisSynthesis
-from app.ai.services.routing_service import active_goals
+from app.ai.services.routing_service import active_goals, is_explicit_patch_request
 
 
 def _analysis_language(state: AgentState) -> str:
@@ -169,6 +169,43 @@ async def generate_hypotheses_node(
                     {
                         "USER_INPUT": state["original_input"],
                         "selected_skill": state["selected_skill"].value,
+                        "patch_request": {
+                            "explicit": is_explicit_patch_request(
+                                state["original_input"]
+                            ),
+                            "instruction": (
+                                "Propose one validated change when the target and "
+                                "new value are unambiguous; otherwise ask one question."
+                            ),
+                            "editable_fields": {
+                                "goal": [
+                                    "title",
+                                    "description",
+                                    "category",
+                                    "target_date",
+                                ],
+                                "habit": [
+                                    "goal_id",
+                                    "name",
+                                    "description",
+                                    "duration_minutes",
+                                    "recurrence_rule",
+                                    "start_date",
+                                ],
+                                "routine_item": [
+                                    "goal_id",
+                                    "title",
+                                    "description",
+                                    "item_type",
+                                    "schedule_type",
+                                    "start_at",
+                                    "end_at",
+                                    "duration_minutes",
+                                    "recurrence_rule",
+                                ],
+                                "profile": ["name", "style", "description"],
+                            },
+                        },
                         "execution_diagnosis": state.get(
                             "execution_diagnosis",
                             {},
@@ -178,9 +215,7 @@ async def generate_hypotheses_node(
                             [],
                         ),
                         "behavioral_state": state.get("behavioral_state", {}),
-                        "active_goals": active_goals(
-                            list(state.get("goals", []))
-                        )[:20],
+                        "active_goals": active_goals(list(state.get("goals", [])))[:20],
                         "goals": state.get("goals", [])[:20],
                         "habits": state.get("habits", [])[:30],
                         "routines": state.get("routines", [])[:30],

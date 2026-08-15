@@ -15,6 +15,7 @@ from app.ai.graph.state import AgentState
 from app.ai.models.gateway import ModelRole
 from app.ai.prompts.alfred import build_alfred_system_prompt
 from app.ai.prompts.payloads import bounded_json
+from app.ai.retrieval.editorial_phrases import retrieve_motivational_phrase
 from app.ai.schemas.alfred import AlfredIntervention
 from app.ai.services.routing_service import active_goals
 
@@ -51,17 +52,14 @@ def _direct_conversation_strategy(message: str) -> str | None:
         canonical,
     ):
         return "identity_and_scope"
-    if (
-        re.search(
-            r"\b(?:voce (?:tem|ve|sabe|acessa)|quais dados|que informacoes|"
-            r"what data|what information|que datos|quelles donnees)\b",
-            canonical,
-        )
-        and re.search(
-            r"\b(?:habitos?|rotina|metas?|dados|informacoes|habits?|routine|"
-            r"goals?|data|datos|rutina|donnees|habitudes?)\b",
-            canonical,
-        )
+    if re.search(
+        r"\b(?:voce (?:tem|ve|sabe|acessa)|quais dados|que informacoes|"
+        r"what data|what information|que datos|quelles donnees)\b",
+        canonical,
+    ) and re.search(
+        r"\b(?:habitos?|rotina|metas?|dados|informacoes|habits?|routine|"
+        r"goals?|data|datos|rutina|donnees|habitudes?)\b",
+        canonical,
     ):
         return "context_transparency"
     return None
@@ -74,7 +72,10 @@ async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
         strategy = "clarify_routine_goal"
     elif direct_strategy is not None:
         strategy = direct_strategy
-    elif state.get("evidence_pack", {}).get("references"):
+    elif state.get("route") in {
+        "rag_then_alfred",
+        "rag_then_feedbacker",
+    } or state.get("evidence_pack", {}).get("references"):
         strategy = "evidence_explanation"
     elif (
         dropout_risk.get("level") == "high"
@@ -83,10 +84,16 @@ async def select_alfred_strategy_node(state: AgentState) -> dict[str, Any]:
         strategy = "recovery_support"
     else:
         strategy = "adaptive_conversation"
+    editorial_phrase = retrieve_motivational_phrase(
+        state["original_input"],
+        response_language=state.get("response_language", "en"),
+        recent_assistant_messages=_assistant_messages(state),
+    )
     return traced_update(
         state,
         "selecionar_estrategia_alfred",
         alfred_strategy=state.get("alfred_strategy", strategy),
+        editorial_phrase=state.get("editorial_phrase", editorial_phrase),
     )
 
 
@@ -135,7 +142,9 @@ async def plan_alfred_response_node(state: AgentState) -> dict[str, Any]:
         alfred_plan=state.get(
             "alfred_plan",
             {
-                "objective": objectives.get(strategy, objectives["adaptive_conversation"]),
+                "objective": objectives.get(
+                    strategy, objectives["adaptive_conversation"]
+                ),
                 "tone": "warm_collaborative_practical",
                 "key_points": [
                     f"selected_strategy={strategy}",
@@ -232,11 +241,7 @@ async def generate_alfred_intervention_node(
             current_goals = active_goals(list(state.get("goals", [])))
             ordered_goals = [
                 *current_goals,
-                *[
-                    goal
-                    for goal in state.get("goals", [])
-                    if goal not in current_goals
-                ],
+                *[goal for goal in state.get("goals", []) if goal not in current_goals],
             ][:10]
             user_payload = {
                 "USER_INPUT": state["original_input"],
@@ -244,21 +249,16 @@ async def generate_alfred_intervention_node(
                 "response_plan": state.get("alfred_plan", {}),
                 "context_inventory": context_inventory,
                 "behavioral_state": (
-                    state.get("behavioral_state", {})
-                    if use_routine_context
-                    else {}
+                    state.get("behavioral_state", {}) if use_routine_context else {}
                 ),
                 "active_goals": current_goals[:10] if use_routine_context else [],
                 "goals": ordered_goals if use_routine_context else [],
-                "habits": (
-                    state.get("habits", [])[:20]
-                    if use_routine_context
-                    else []
-                ),
+                "habits": (state.get("habits", [])[:20] if use_routine_context else []),
                 "evidence_pack": (
-                    state.get("evidence_pack", {})
-                    if use_routine_context
-                    else {}
+                    state.get("evidence_pack", {}) if use_routine_context else {}
+                ),
+                "editorial_phrase": (
+                    state.get("editorial_phrase") if use_routine_context else None
                 ),
                 "UNTRUSTED_CONTEXT": {
                     "recent_messages": (

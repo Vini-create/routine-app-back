@@ -1,0 +1,62 @@
+[
+  {
+    "phrase_id": "alfred-motivation-001",
+    "topics": ["motivation", "goals"],
+    "texts": {
+      "pt-BR": "Você não precisa esperar a motivação perfeita para voltar a construir algo que importa.",
+      "en": "You do not have to wait for perfect motivation to return to building something that matters.",
+      "es": "No necesitas esperar una motivación perfecta para volver a construir algo que importa.",
+      "fr": "Vous n’avez pas besoin d’attendre une motivation parfaite pour reprendre la construction de quelque chose qui compte."
+    }
+  },
+  {
+    "phrase_id": "alfred-motivation-002",
+    "topics": ["motivation", "resilience"],
+    "texts": {
+      "pt-BR": "Um dia difícil muda o ritmo da caminhada, não o valor do destino.",
+      "en": "A difficult day can change the pace of the journey without changing the value of the destination.",
+      "es": "Un día difícil puede cambiar el ritmo del camino sin cambiar el valor del destino.",
+      "fr": "Une journée difficile peut changer le rythme du parcours sans changer la valeur de la destination."
+    }
+  },
+  {
+    "phrase_id": "alfred-consistency-001",
+    "topics": ["habits", "consistency"],
+    "texts": {
+      "pt-BR": "Constância não é nunca interromper; é saber retomar sem transformar a pausa em derrota.",
+      "en": "Consistency is not never stopping; it is knowing how to return without turning a pause into defeat.",
+      "es": "La constancia no es no detenerse nunca; es saber volver sin convertir una pausa en derrota.",
+      "fr": "La constance ne consiste pas à ne jamais s’arrêter, mais à savoir reprendre sans transformer une pause en défaite."
+    }
+  },
+  {
+    "phrase_id": "alfred-goals-001",
+    "topics": ["goals", "planning"],
+    "texts": {
+      "pt-BR": "Uma meta ganha força quando deixa de ser apenas desejada e passa a orientar escolhas reais.",
+      "en": "A goal gains strength when it stops being only desired and starts guiding real choices.",
+      "es": "Una meta gana fuerza cuando deja de ser solo un deseo y empieza a orientar decisiones reales.",
+      "fr": "Un objectif gagne en force lorsqu’il cesse d’être seulement désiré et commence à guider des choix réels."
+    }
+  },
+  {
+    "phrase_id": "alfred-study-001",
+    "topics": ["study-and-learning", "motivation"],
+    "texts": {
+      "pt-BR": "Cada sessão de estudo é um voto silencioso na pessoa que você está se preparando para ser.",
+      "en": "Every study session is a quiet vote for the person you are preparing to become.",
+      "es": "Cada sesión de estudio es un voto silencioso por la persona en la que te estás preparando para convertirte.",
+      "fr": "Chaque séance d’étude est un vote silencieux pour la personne que vous vous préparez à devenir."
+    }
+  },
+  {
+    "phrase_id": "alfred-action-001",
+    "topics": ["procrastination", "self-regulation"],
+    "texts": {
+      "pt-BR": "Clareza não aparece sempre antes da ação; muitas vezes ela nasce enquanto você avança.",
+      "en": "Clarity does not always arrive before action; often it emerges while you move forward.",
+      "es": "La claridad no siempre aparece antes de actuar; muchas veces nace mientras avanzas.",
+      "fr": "La clarté n’arrive pas toujours avant l’action ; souvent, elle naît pendant que vous avancez."
+    }
+  }
+]

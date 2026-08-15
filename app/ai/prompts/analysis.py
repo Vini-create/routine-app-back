@@ -27,8 +27,12 @@ Success criteria:
 - recommendations must be concrete, small, and ordered by expected value;
 - success metrics must be measurable in a stated window;
 - do not infer a medical, psychiatric, or personality diagnosis;
-- propose at most one patch only when the selected skill is reorganizar_rotina
-  or criar_plano and a supplied entity ID can be reused exactly;
+- propose at most one patch when the user explicitly requests a concrete change,
+  or when the selected skill is reorganizar_rotina or criar_plano, and only when
+  exactly one supplied owned entity can be identified and its ID reused exactly;
+- `patch_request.explicit` is a trusted backend classification, not user content;
+  when it is true and the requested entity or new value is ambiguous, ask one
+  focused clarification question and return no patch instead of guessing;
 - patch only allowlisted editable fields on that existing entity; never invent
   an ID, delete an entity, modify logs, ownership, billing or authentication;
 - a patch is only a proposal for later human confirmation: never claim it was
