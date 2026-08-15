@@ -156,6 +156,30 @@ async def generate_hypotheses_node(
     state: AgentState,
     runtime: Runtime[GraphRuntimeContext] | None = None,
 ) -> dict[str, Any]:
+    # An open-ended request such as "make this fit my time" does not need an
+    # expensive model call when the trusted context already contains a safe,
+    # owned duration candidate.  Keeping this path deterministic makes the
+    # confirmation feature fast and available even if the Feedbacker model is
+    # temporarily slow or unavailable.
+    if is_open_ended_patch_request(state["original_input"]):
+        deterministic_patch = _conservative_duration_patch(state)
+        if deterministic_patch is not None:
+            return traced_update(
+                state,
+                "gerar_hipoteses",
+                root_cause_hypotheses=[],
+                analysis_model_output={
+                    "hypotheses": [],
+                    "recommendations": [],
+                    "success_metrics": deterministic_patch["success_metrics"],
+                    "response_message": _deterministic_patch_response(
+                        language=_analysis_language(state),
+                        reason=str(deterministic_patch["reason"]),
+                    ),
+                    "proposed_patch": deterministic_patch,
+                },
+            )
+
     gateway = (
         runtime.context.model_gateway
         if runtime is not None and runtime.context is not None
@@ -406,6 +430,28 @@ def _conservative_duration_patch(state: AgentState) -> dict[str, Any] | None:
             }
         ],
     }
+
+
+def _deterministic_patch_response(*, language: str, reason: str) -> str:
+    templates = {
+        "pt-BR": (
+            "Preparei uma alteração segura para você avaliar. {reason} "
+            "Nada será alterado sem a sua confirmação."
+        ),
+        "es": (
+            "Preparé un cambio seguro para que lo evalúes. {reason} "
+            "Nada se modificará sin tu confirmación."
+        ),
+        "fr": (
+            "J’ai préparé une modification sûre à évaluer. {reason} "
+            "Rien ne sera modifié sans votre confirmation."
+        ),
+        "en": (
+            "I prepared a safe change for you to review. {reason} "
+            "Nothing will change without your confirmation."
+        ),
+    }
+    return templates.get(language, templates["en"]).format(reason=reason)
 
 
 async def define_success_metrics_node(state: AgentState) -> dict[str, Any]:

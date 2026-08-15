@@ -583,3 +583,8 @@ Nesta versão de portfólio, o orquestrador e o PatchService não criam
 - A memória de decisões não entra no Alfred conversacional.
 - Resumo novo só substitui o anterior quando existe saída estruturada válida.
 - Métricas de uso, tokens e latência possuem retenção maior que conteúdo bruto.
+> Atualização de confiabilidade: pedidos abertos de alteração com candidato
+> seguro seguem um atalho determinístico dentro do Feedbacker, sem chamada de
+> modelo, mas preservando validação, simulação, persistência e confirmação
+> humana. Saudações curtas prevalecem sobre a habilidade selecionada e seguem
+> para o Alfred conversacional.

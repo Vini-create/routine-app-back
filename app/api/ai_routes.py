@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -48,6 +49,8 @@ from app.billing.service import BillingAccess, require_active_billing_access
 from app.db.db import get_session
 from app.models.auth import User
 from app.models.ai import AIConversation
+
+logger = logging.getLogger(__name__)
 
 # Coarse per-IP abuse protection. Per-plan limits are enforced transactionally
 # in usage_service, so this guard must stay above the highest paid-plan limit.
@@ -194,6 +197,20 @@ async def stream_alfred(
                     "request_id": error.request_id,
                     "code": error.code.value,
                     "message": error.message,
+                },
+            )
+        except Exception:
+            # Keep the SSE contract terminal even if serialization or another
+            # transport-side step fails after orchestration. Without this
+            # event, the browser only sees an abruptly closed stream and may
+            # leave the assistant bubble looking active.
+            logger.exception("Unexpected Alfred streaming failure")
+            yield _sse(
+                "error",
+                {
+                    "request_id": None,
+                    "code": "graph_execution_failed",
+                    "message": "Alfred could not complete this request.",
                 },
             )
         finally:

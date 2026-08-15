@@ -34,6 +34,10 @@ _DETERMINISTIC_PATTERNS = _compiled(
     r"\b(?:cuales|lista|muestra)\b.{0,45}\b(?:tareas?|actividades|agenda)\b",
 )
 
+_GREETING_PATTERNS = _compiled(
+    r"^(?:ola|oi|hello|hi|hey|hola|bonjour)[!,.? ]*$",
+)
+
 _PATCH_REQUEST_PATTERNS = _compiled(
     r"\b(?:mude|altere|ajuste|reorganize|remarque|troque|reduza|aumente|adicione)\b.{0,75}\b(?:rotina|tarefa|atividade|habito|meta|horario|duracao|prioridade)\b",
     r"\b(?:change|update|adjust|reschedule|reduce|increase)\b.{0,75}\b(?:routine|task|habit|goal|time|duration|priority)\b",
@@ -175,6 +179,18 @@ def classify_route(
     analytical = _matches(_ANALYTICAL_PATTERNS, canonical)
     knowledge = _matches(_KNOWLEDGE_PATTERNS, canonical)
     patch_request = is_explicit_patch_request(message)
+
+    # A selected skill is a hint, not an instruction to run an expensive
+    # capability when the actual message is only a greeting.  This also keeps
+    # accidental "olá" turns from consuming a weekly deep-analysis unit.
+    if _matches(_GREETING_PATTERNS, canonical):
+        return DeterministicRoutingDecision(
+            InternalRoute.ALFRED,
+            "general_greeting",
+            0.99,
+            "A greeting should receive a conversational response regardless of the selected skill.",
+            False,
+        )
 
     if knowledge and analytical:
         return DeterministicRoutingDecision(

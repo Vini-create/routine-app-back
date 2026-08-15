@@ -583,6 +583,8 @@ async def test_explicit_change_fallback_survives_the_complete_graph() -> None:
     assert result["proposed_patch"]["entity_id"] == habit_id
     assert result["patch_requires_confirmation"] is True
     assert result["final_response"]["requires_confirmation"] is True
+    assert ModelRole.FEEDBACKER not in gateway.calls
+    assert "Nada será alterado sem a sua confirmação" in result["final_response"]["message"]
 
 
 @pytest.mark.asyncio

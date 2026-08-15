@@ -161,6 +161,14 @@ def test_message_can_override_a_conflicting_frontend_hint() -> None:
     assert decision.confidence >= 0.9
 
 
+def test_greeting_does_not_trigger_selected_deep_skill() -> None:
+    decision = classify_route("Olá", SelectedSkill.REORGANIZAR_ROTINA)
+
+    assert decision.route is InternalRoute.ALFRED
+    assert decision.detected_intent == "general_greeting"
+    assert decision.needs_model is False
+
+
 def test_ambiguous_conversation_is_the_only_case_reserved_for_model_routing() -> None:
     decision = classify_route("Preciso de ajuda.", SelectedSkill.AUTO)
 

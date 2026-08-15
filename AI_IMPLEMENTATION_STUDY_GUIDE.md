@@ -6099,3 +6099,33 @@ A voz compartilhada também passou a pedir energia mais presente e expressiva em
 conversas comuns, celebração específica quando existe progresso real e redução
 deliberada dessa energia quando o usuário está frustrado ou vulnerável. A versão
 dos prompts foi atualizada para `2026-08-14.v4`.
+## Correção de confiabilidade para sugestões abertas de rotina
+
+Pedidos explícitos como “monte uma sugestão de alteração para caber no meu
+tempo” agora usam primeiro o contexto estruturado e confiável do usuário para
+selecionar um hábito ou item de rotina ativo. O backend calcula uma redução
+conservadora de duração, simula a mudança, valida ownership e persiste o patch
+pendente antes de devolvê-lo ao frontend.
+
+Esse caminho não chama o Feedbacker quando já existe um candidato seguro. Isso
+reduz custo e remove o risco de timeout justamente da ação que precisa mostrar
+os botões de aceitar, ajustar e rejeitar. A alteração continua proibida até a
+confirmação explícita do usuário.
+
+```python
+if is_open_ended_patch_request(state["original_input"]):
+    deterministic_patch = _conservative_duration_patch(state)
+    if deterministic_patch is not None:
+        return traced_update(
+            state,
+            "gerar_hipoteses",
+            analysis_model_output={
+                "proposed_patch": deterministic_patch,
+                "response_message": _deterministic_patch_response(...),
+            },
+        )
+```
+
+Uma saudação curta também passa a prevalecer sobre a habilidade selecionada.
+Assim, escrever “olá” enquanto “Reorganizar rotina” está ativo usa o Alfred
+conversacional e não consome uma análise profunda semanal.
