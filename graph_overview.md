@@ -241,7 +241,7 @@ flowchart TD
         F2[Node: identificar_padroes<br/>Converte tendências e anomalias em evidências]
         F3[Node: gerar_hipoteses<br/>gpt-5; hipóteses, recomendações,<br/>patch e updated_summary_en]
         F4[Node: gerar_recomendacoes<br/>Extrai recomendações estruturadas]
-        F5[Node: gerar_patch<br/>Extrai no máximo um ProposedPatch]
+        F5[Node: gerar_patch<br/>Extrai no máximo um ProposedPatch<br/>ou cria fallback seguro para sugestão aberta]
         F6[Node: definir_metricas_sucesso<br/>Extrai métricas mensuráveis]
         F7[Node: montar_relatorio_feedbacker<br/>Monta AnalysisReport e resposta Alfred]
     end

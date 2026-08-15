@@ -6033,6 +6033,31 @@ valor forem inequívocos. Se faltar qualquer um deles, faz uma pergunta em vez d
 inventar. Toda proposta continua passando por ownership, allowlist, schema,
 simulação e confirmação humana antes de qualquer escrita.
 
+Pedidos abertos como “monte uma sugestão de alteração para caber no meu tempo”
+merecem tratamento diferente de comandos precisos como “mude Estudar para
+19h”. No primeiro caso, o usuário está delegando ao Alfred a escolha da melhor
+alteração. A detecção agora marca `open_ended_suggestion=true` e não aceita uma
+recomendação genérica como resultado final.
+
+Se o modelo omitir a proposta ou inventar um alvo, o node `gerar_patch` aplica
+um fallback determinístico: considera somente hábitos e itens de rotina ativos
+do próprio contexto, combina duração, frequência esperada e baixa conclusão,
+seleciona um único candidato e simula uma redução conservadora de duração. A
+proposta ainda segue pelo fluxo normal:
+
+```text
+pedido aberto de ajuste
+  → Feedbacker analisa
+  → patch válido do modelo ou fallback determinístico
+  → ownership + allowlist + schema
+  → simulação before/after
+  → card de confirmação no frontend
+  → usuário edita, aceita ou rejeita
+```
+
+Assim, a LLM ajuda a analisar e explicar, mas a disponibilidade do recurso mais
+importante não depende apenas de ela decidir preencher um campo opcional.
+
 Validação executada nesta alteração:
 
 ```text

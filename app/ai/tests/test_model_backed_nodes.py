@@ -14,6 +14,7 @@ from app.ai.graph import (
     build_graph,
 )
 from app.ai.graph.state import AgentState
+from app.ai.graph.nodes.analysis import generate_patch_node
 from app.ai.models.gateway import (
     LangChainOpenAIModelGateway,
     ModelInvocationResult,
@@ -499,6 +500,89 @@ async def test_obvious_deep_analysis_uses_feedbacker_and_critic_models() -> None
     assert result["proposed_patch"] is None
     assert result["summary_update"].startswith("The user may be overloaded")
     assert result["analysis_report"]["metadata"]["patch_generation_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_explicit_change_request_gets_safe_fallback_patch_when_model_omits_it() -> (
+    None
+):
+    habit_id = "00000000-0000-0000-0000-000000000099"
+    request_state = state(
+        "Monte uma sugestão de alteração para caber mais no meu tempo e começar aos poucos."
+    )
+    request_state["response_language"] = "pt-BR"
+    request_state["habits"] = [
+        {
+            "id": habit_id,
+            "name": "Estudar programação",
+            "status": "active",
+            "duration_minutes": 60,
+        }
+    ]
+    request_state["routines"] = []
+    request_state["habit_metrics"] = {
+        "entities": [
+            {
+                "entity_type": "habit",
+                "entity_id": habit_id,
+                "expected_count": 20,
+                "completion_rate": 0.1,
+            }
+        ]
+    }
+    request_state["analysis_model_output"] = {
+        "proposed_patch": {
+            "entity_type": "habit",
+            "entity_id": "00000000-0000-0000-0000-000000000777",
+            "operations": [{"op": "replace", "path": "/duration_minutes", "value": 1}],
+            "reason": "Unsafe invented target from model.",
+            "success_metrics": [],
+        }
+    }
+
+    result = await generate_patch_node(request_state)
+
+    assert result["patch_requires_confirmation"] is True
+    assert result["proposed_patch"]["entity_type"] == "habit"
+    assert result["proposed_patch"]["entity_id"] == habit_id
+    assert result["proposed_patch"]["operations"] == [
+        {"op": "replace", "path": "/duration_minutes", "value": 40}
+    ]
+    assert "60 para 40 minutos" in result["proposed_patch"]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_change_fallback_survives_the_complete_graph() -> None:
+    gateway = FakeModelGateway()
+    habit_id = "00000000-0000-0000-0000-000000000098"
+    request_state = state(
+        "Monte uma sugestão de alteração para caber mais no meu tempo e começar aos poucos."
+    )
+    request_state["profile"] = {"timezone": "UTC", "language": "portuguese_br"}
+    request_state["goals"] = []
+    request_state["habits"] = [
+        {
+            "id": habit_id,
+            "goal_id": None,
+            "name": "Estudar programação",
+            "status": "active",
+            "duration_minutes": 60,
+            "start_date": "2026-01-01",
+            "recurrence_rule": "FREQ=DAILY",
+        }
+    ]
+    request_state["routines"] = []
+    request_state["habit_logs"] = []
+    request_state["routine_logs"] = []
+
+    result = await invoke(request_state, gateway)
+
+    assert result["detected_intent"] == "routine_change_request"
+    assert result["route"] is InternalRoute.FEEDBACKER
+    assert result["proposed_patch"] is not None
+    assert result["proposed_patch"]["entity_id"] == habit_id
+    assert result["patch_requires_confirmation"] is True
+    assert result["final_response"]["requires_confirmation"] is True
 
 
 @pytest.mark.asyncio

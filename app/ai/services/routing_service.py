@@ -38,6 +38,16 @@ _PATCH_REQUEST_PATTERNS = _compiled(
     r"\b(?:mude|altere|ajuste|reorganize|remarque|troque|reduza|aumente|adicione)\b.{0,75}\b(?:rotina|tarefa|atividade|habito|meta|horario|duracao|prioridade)\b",
     r"\b(?:change|update|adjust|reschedule|reduce|increase)\b.{0,75}\b(?:routine|task|habit|goal|time|duration|priority)\b",
     r"\b(?:cambia|ajusta|reprograma|reduce|aumenta)\b.{0,75}\b(?:rutina|tarea|habito|meta|hora|duracion)\b",
+    r"\b(?:monte|crie|faca|proponha|sugira)\b.{0,70}\b(?:alteracao|mudanca|ajuste|reorganizacao)\b",
+    r"\b(?:sugestao|proposta)\b.{0,45}\b(?:alteracao|mudanca|ajuste)\b",
+    r"\b(?:make|create|propose|suggest)\b.{0,70}\b(?:change|adjustment|reorganization)\b",
+    r"\b(?:propon|sugier|crea)\w*\b.{0,70}\b(?:cambio|ajuste|reorganizacion)\b",
+)
+_OPEN_ENDED_PATCH_PATTERNS = _compiled(
+    r"\b(?:monte|crie|faca|proponha|sugira)\b.{0,70}\b(?:alteracao|mudanca|ajuste|reorganizacao)\b",
+    r"\b(?:sugestao|proposta)\b.{0,45}\b(?:alteracao|mudanca|ajuste)\b",
+    r"\b(?:make|create|propose|suggest)\b.{0,70}\b(?:change|adjustment|reorganization)\b",
+    r"\b(?:propon|sugier|crea)\w*\b.{0,70}\b(?:cambio|ajuste|reorganizacion)\b",
 )
 
 _ANALYTICAL_PATTERNS = _compiled(
@@ -105,6 +115,12 @@ def is_explicit_patch_request(message: str) -> bool:
     """Identify an explicit request to change existing application data."""
 
     return _matches(_PATCH_REQUEST_PATTERNS, _canonical(message))
+
+
+def is_open_ended_patch_request(message: str) -> bool:
+    """Identify when Alfred was asked to choose and design the adjustment."""
+
+    return _matches(_OPEN_ENDED_PATCH_PATTERNS, _canonical(message))
 
 
 def active_goals(goals: list[dict[str, object]]) -> list[dict[str, object]]:

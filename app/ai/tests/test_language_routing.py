@@ -110,6 +110,11 @@ def test_explicit_short_greetings_do_not_receive_an_ambiguous_language_guess(
             SelectedSkill.AUTO,
             InternalRoute.FEEDBACKER,
         ),
+        (
+            "Monte uma sugestão de alteração para caber mais no meu tempo e ir começando aos poucos.",
+            SelectedSkill.ANALISAR_PROGRESSO,
+            InternalRoute.FEEDBACKER,
+        ),
     ],
 )
 def test_canonical_route_examples(

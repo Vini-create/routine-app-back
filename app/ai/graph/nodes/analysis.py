@@ -13,7 +13,11 @@ from app.ai.models.gateway import ModelRole
 from app.ai.prompts.analysis import build_feedbacker_system_prompt
 from app.ai.prompts.payloads import bounded_json
 from app.ai.schemas.analysis import AnalysisSynthesis
-from app.ai.services.routing_service import active_goals, is_explicit_patch_request
+from app.ai.services.routing_service import (
+    active_goals,
+    is_explicit_patch_request,
+    is_open_ended_patch_request,
+)
 
 
 def _analysis_language(state: AgentState) -> str:
@@ -173,6 +177,9 @@ async def generate_hypotheses_node(
                             "explicit": is_explicit_patch_request(
                                 state["original_input"]
                             ),
+                            "open_ended_suggestion": is_open_ended_patch_request(
+                                state["original_input"]
+                            ),
                             "instruction": (
                                 "Propose one validated change when the target and "
                                 "new value are unambiguous; otherwise ask one question."
@@ -295,6 +302,15 @@ async def generate_recommendations_node(state: AgentState) -> dict[str, Any]:
 
 async def generate_patch_node(state: AgentState) -> dict[str, Any]:
     generated = state.get("analysis_model_output", {}).get("proposed_patch")
+    fallback = (
+        _conservative_duration_patch(state)
+        if is_explicit_patch_request(state["original_input"])
+        else None
+    )
+    if is_open_ended_patch_request(state["original_input"]):
+        generated = fallback or generated
+    elif generated is None:
+        generated = fallback
     return traced_update(
         state,
         "gerar_patch",
@@ -303,6 +319,93 @@ async def generate_patch_node(state: AgentState) -> dict[str, Any]:
             state.get("proposed_patch", generated) is not None
         ),
     )
+
+
+def _conservative_duration_patch(state: AgentState) -> dict[str, Any] | None:
+    """Guarantee a safe proposal when Feedbacker omitted an explicit request."""
+
+    metric_by_entity = {
+        (str(metric.get("entity_type")), str(metric.get("entity_id"))): metric
+        for metric in state.get("habit_metrics", {}).get("entities", [])
+    }
+    candidates: list[tuple[float, str, dict[str, Any]]] = []
+    for entity_type, entities, name_key, metric_type in (
+        ("habit", state.get("habits", []), "name", "habit"),
+        ("routine_item", state.get("routines", []), "title", "routine"),
+    ):
+        for entity in entities:
+            if entity.get("status") != "active" or not entity.get("id"):
+                continue
+            duration = int(entity.get("duration_minutes") or 0)
+            if duration <= 5:
+                continue
+            metric = metric_by_entity.get((metric_type, str(entity["id"])), {})
+            completion_rate = metric.get("completion_rate")
+            missed_weight = 1.0 - float(completion_rate or 0.0)
+            expected_weight = min(2.0, int(metric.get("expected_count") or 0) / 10)
+            score = duration * (1 + missed_weight + expected_weight)
+            candidates.append((score, entity_type, {**entity, "_name_key": name_key}))
+
+    if not candidates:
+        return None
+    _, entity_type, target = max(
+        candidates,
+        key=lambda candidate: (candidate[0], str(candidate[2].get("id"))),
+    )
+    current_duration = int(target["duration_minutes"])
+    proposed_duration = max(5, int(round((current_duration * 0.7) / 5) * 5))
+    if proposed_duration >= current_duration:
+        proposed_duration = max(5, current_duration - 5)
+    name = str(target.get(str(target["_name_key"]), "item"))
+    language = state.get("response_language", "en")
+    reasons = {
+        "pt-BR": (
+            f"Para começar com uma carga mais compatível com seu tempo, Alfred "
+            f"propõe reduzir temporariamente a duração de {name}, de "
+            f"{current_duration} para {proposed_duration} minutos."
+        ),
+        "es": (
+            f"Para comenzar con una carga más compatible con tu tiempo, Alfred "
+            f"propone reducir temporalmente la duración de {name}, de "
+            f"{current_duration} a {proposed_duration} minutos."
+        ),
+        "fr": (
+            f"Pour commencer avec une charge plus compatible avec votre temps, "
+            f"Alfred propose de réduire temporairement la durée de {name}, de "
+            f"{current_duration} à {proposed_duration} minutes."
+        ),
+        "en": (
+            f"To start with a load that better fits your time, Alfred proposes "
+            f"temporarily reducing {name} from {current_duration} to "
+            f"{proposed_duration} minutes."
+        ),
+    }
+    metric_names = {
+        "pt-BR": "Taxa de conclusão do item",
+        "es": "Tasa de finalización del elemento",
+        "fr": "Taux de réalisation de l’élément",
+        "en": "Item completion rate",
+    }
+    return {
+        "entity_type": entity_type,
+        "entity_id": target["id"],
+        "operations": [
+            {
+                "op": "replace",
+                "path": "/duration_minutes",
+                "value": proposed_duration,
+            }
+        ],
+        "reason": reasons.get(language, reasons["en"]),
+        "success_metrics": [
+            {
+                "name": metric_names.get(language, metric_names["en"]),
+                "baseline": "current",
+                "target": "increase",
+                "evaluation_window_days": 14,
+            }
+        ],
+    }
 
 
 async def define_success_metrics_node(state: AgentState) -> dict[str, Any]:

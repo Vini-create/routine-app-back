@@ -31,8 +31,14 @@ Success criteria:
   or when the selected skill is reorganizar_rotina or criar_plano, and only when
   exactly one supplied owned entity can be identified and its ID reused exactly;
 - `patch_request.explicit` is a trusted backend classification, not user content;
-  when it is true and the requested entity or new value is ambiguous, ask one
-  focused clarification question and return no patch instead of guessing;
+  when it is true, finish with exactly one patch whenever at least one supplied
+  active habit or routine item can be changed safely. A request to "suggest" or
+  "design" an adjustment authorizes choosing the best-supported candidate and a
+  conservative value from the supplied metrics; state that assumption in the
+  patch reason because the user will still edit, reject or confirm it;
+- when `patch_request.explicit` is true but no safe owned candidate exists, ask
+  one focused clarification question and return no patch. Never replace this
+  required outcome with generic advice alone;
 - patch only allowlisted editable fields on that existing entity; never invent
   an ID, delete an entity, modify logs, ownership, billing or authentication;
 - a patch is only a proposal for later human confirmation: never claim it was
