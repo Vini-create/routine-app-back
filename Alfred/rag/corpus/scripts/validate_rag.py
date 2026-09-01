@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Alfred-only canonical RAG and its migration boundaries."""
+"""Validate the public Alfred-only canonical RAG corpus."""
 
 from __future__ import annotations
 
@@ -21,15 +21,25 @@ KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DOC_ID = re.compile(r"^(?:kd|pb)-[a-z0-9]+(?:-[a-z0-9]+)*$")
 SOURCE_ID = re.compile(r"^src-[a-z0-9]+(?:-[a-z0-9]+)*$")
 ALLOWED_DOCUMENT_STATUSES = {
-    "draft", "machine_audited", "human_reviewed", "deprecated", "archived", "quarantined",
+    "draft",
+    "machine_audited",
+    "human_reviewed",
+    "deprecated",
+    "archived",
+    "quarantined",
 }
 INDEXABLE_STATUSES = {"machine_audited", "human_reviewed"}
 ALLOWED_QUOTE_STATUSES = {
-    "verified_primary_source", "verified_official_edition", "verified_reliable_secondary",
+    "verified_primary_source",
+    "verified_official_edition",
+    "verified_reliable_secondary",
 }
 ACTIVE_SOURCE_STATUSES = {
-    "verified_primary", "verified_official_repository", "verified_reliable_secondary",
+    "verified_primary",
+    "verified_official_repository",
+    "verified_reliable_secondary",
 }
+NON_PUBLIC_ROOTS = frozenset({"archive", "migration", "non_indexed"})
 KNOWLEDGE_HEADINGS = (
     "## Operational definition",
     "## What this concept does not mean",
@@ -72,17 +82,9 @@ def relative(path: Path) -> str:
     return path.relative_to(RAG).as_posix()
 
 
-def resolve_migration_path(value: object) -> Path:
-    """Resolve paths recorded before the corpus moved under Alfred/rag."""
-    path = Path(str(value or ""))
-
-    # FILE_MAPPING e um registro historico: seus valores continuam com o
-    # prefixo ``rag/`` original. Hoje esse prefixo representa a raiz de
-    # ``Alfred/rag/corpus``, sem exigir a reescrita do inventario de migracao.
-    if path.parts and path.parts[0] == "rag":
-        return RAG.joinpath(*path.parts[1:])
-
-    return RAG / path
+def is_public_path(path: Path) -> bool:
+    relative_parts = path.relative_to(RAG).parts
+    return not relative_parts or relative_parts[0] not in NON_PUBLIC_ROOTS
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -116,7 +118,7 @@ def load_frontmatter(path: Path) -> tuple[dict, str] | None:
     if not isinstance(metadata, dict):
         error(f"{relative(path)}: frontmatter is not an object")
         return None
-    return metadata, text[match.end():]
+    return metadata, text[match.end() :]
 
 
 def require_fields(label: str, row: dict, fields: tuple[str, ...]) -> None:
@@ -158,30 +160,42 @@ def normalized_prose_blocks(path: Path, body: str) -> list[str]:
 
 def main() -> int:
     required = (
-        "README.md", "INDEX.md", "RETRIEVAL_CONTRACT.md", "CHUNKING_SPEC.md",
-        "COVERAGE_MATRIX.md", "COVERAGE_GAPS.jsonl", "COVERAGE_EXPANSION_REPORT.md",
-        "source_registry.jsonl", "concept_registry.jsonl", "document_registry.jsonl",
-        "schemas/topic.schema.json", "schemas/knowledge.schema.json",
-        "schemas/playbook.schema.json", "schemas/quote.schema.json",
-        "schemas/source.schema.json", "non_indexed/system_prompt_candidates.md",
-        "non_indexed/security_gate_candidates.md", "migration/MIGRATION_BASELINE.md",
-        "migration/FILE_MAPPING.jsonl", "migration/MIGRATION_REPORT.md",
+        "README.md",
+        "INDEX.md",
+        "RETRIEVAL_CONTRACT.md",
+        "CHUNKING_SPEC.md",
+        "COVERAGE_MATRIX.md",
+        "COVERAGE_GAPS.jsonl",
+        "COVERAGE_EXPANSION_REPORT.md",
+        "source_registry.jsonl",
+        "concept_registry.jsonl",
+        "document_registry.jsonl",
+        "schemas/topic.schema.json",
+        "schemas/knowledge.schema.json",
+        "schemas/playbook.schema.json",
+        "schemas/quote.schema.json",
+        "schemas/source.schema.json",
     )
     for item in required:
         if not (RAG / item).is_file():
             error(f"missing required file: {item}")
-    for directory in ("sources/original", "sources/open_access", "sources/external_references", "sources/derived_notes"):
+    for directory in (
+        "sources/original",
+        "sources/open_access",
+        "sources/external_references",
+        "sources/derived_notes",
+    ):
         if not (RAG / directory).is_dir():
             error(f"missing source boundary directory: {directory}")
 
-    # Syntax-check every current JSON/JSONL file, including archived history.
+    # Syntax-check every JSON/JSONL file in the public corpus.
     jsonl_cache: dict[Path, list[dict]] = {}
-    for path in sorted(RAG.rglob("*.json")):
+    for path in sorted(path for path in RAG.rglob("*.json") if is_public_path(path)):
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             error(f"{relative(path)}: invalid JSON: {exc}")
-    for path in sorted(RAG.rglob("*.jsonl")):
+    for path in sorted(path for path in RAG.rglob("*.jsonl") if is_public_path(path)):
         jsonl_cache[path] = load_jsonl(path)
 
     source_rows = jsonl_cache.get(RAG / "source_registry.jsonl", [])
@@ -194,11 +208,30 @@ def main() -> int:
         if not isinstance(sid, str) or not SOURCE_ID.fullmatch(sid):
             error(f"source registry: invalid source_id {sid!r}")
             continue
-        require_fields(sid, row, ("title", "authors", "publication_year", "source_type", "url", "language", "topics", "verification_status", "requires_human_review", "active", "used_in_production_documents"))
+        require_fields(
+            sid,
+            row,
+            (
+                "title",
+                "authors",
+                "publication_year",
+                "source_type",
+                "url",
+                "language",
+                "topics",
+                "verification_status",
+                "requires_human_review",
+                "active",
+                "used_in_production_documents",
+            ),
+        )
         parsed = urlparse(str(row.get("url", "")))
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             error(f"{sid}: invalid source URL")
-        if row.get("active") and row.get("verification_status") not in ACTIVE_SOURCE_STATUSES:
+        if (
+            row.get("active")
+            and row.get("verification_status") not in ACTIVE_SOURCE_STATUSES
+        ):
             error(f"{sid}: active source lacks an allowed verification status")
 
     topic_paths = sorted(CANONICAL.glob("*/topic.yaml"))
@@ -221,7 +254,22 @@ def main() -> int:
         if tid in topic_meta:
             error(f"duplicate topic_id: {tid}")
         topic_meta[tid] = metadata
-        require_fields(relative(path), metadata, ("title", "description", "status", "requires_human_review", "language", "related_topics", "retrieval_terms", "concept_ids", "playbook_ids", "quote_file"))
+        require_fields(
+            relative(path),
+            metadata,
+            (
+                "title",
+                "description",
+                "status",
+                "requires_human_review",
+                "language",
+                "related_topics",
+                "retrieval_terms",
+                "concept_ids",
+                "playbook_ids",
+                "quote_file",
+            ),
+        )
         validate_status(relative(path), metadata)
         if metadata.get("language") != "en":
             error(f"{relative(path)}: canonical topic language must be en")
@@ -230,7 +278,9 @@ def main() -> int:
 
     canonical_topic_dirs = {path.name for path in CANONICAL.iterdir() if path.is_dir()}
     if canonical_topic_dirs != set(topic_meta):
-        error(f"canonical topic directories do not match topic.yaml IDs: {sorted(canonical_topic_dirs ^ set(topic_meta))}")
+        error(
+            f"canonical topic directories do not match topic.yaml IDs: {sorted(canonical_topic_dirs ^ set(topic_meta))}"
+        )
 
     documents: dict[str, tuple[Path, dict, str]] = {}
     concepts: dict[str, tuple[Path, dict]] = {}
@@ -247,9 +297,33 @@ def main() -> int:
         document_id = metadata.get("id")
         concept_id = metadata.get("concept_id")
         topic_id = metadata.get("topic_id")
-        require_fields(label, metadata, ("id", "topic_id", "concept_id", "title", "document_type", "language", "source_ids", "supported_claims", "evidence_level", "status", "requires_human_review", "index_in_production", "risk_level", "retrieval_terms", "related_concepts"))
+        require_fields(
+            label,
+            metadata,
+            (
+                "id",
+                "topic_id",
+                "concept_id",
+                "title",
+                "document_type",
+                "language",
+                "source_ids",
+                "supported_claims",
+                "evidence_level",
+                "status",
+                "requires_human_review",
+                "index_in_production",
+                "risk_level",
+                "retrieval_terms",
+                "related_concepts",
+            ),
+        )
         validate_status(label, metadata)
-        if not isinstance(document_id, str) or not DOC_ID.fullmatch(document_id) or not document_id.startswith("kd-"):
+        if (
+            not isinstance(document_id, str)
+            or not DOC_ID.fullmatch(document_id)
+            or not document_id.startswith("kd-")
+        ):
             error(f"{label}: invalid knowledge document ID {document_id!r}")
         elif document_id in documents:
             error(f"duplicate document ID: {document_id}")
@@ -263,9 +337,14 @@ def main() -> int:
             concepts[concept_id] = (path, metadata)
         if topic_id not in topic_meta or path.parents[1].name != topic_id:
             error(f"{label}: invalid topic relationship")
-        if metadata.get("document_type") != "knowledge" or metadata.get("language") != "en":
+        if (
+            metadata.get("document_type") != "knowledge"
+            or metadata.get("language") != "en"
+        ):
             error(f"{label}: canonical knowledge type/language mismatch")
-        if len(metadata.get("source_ids", [])) < 2 or len(set(metadata.get("source_ids", []))) != len(metadata.get("source_ids", [])):
+        if len(metadata.get("source_ids", [])) < 2 or len(
+            set(metadata.get("source_ids", []))
+        ) != len(metadata.get("source_ids", [])):
             error(f"{label}: knowledge must have at least two distinct sources")
         for sid in metadata.get("source_ids", []):
             if sid not in sources:
@@ -273,7 +352,12 @@ def main() -> int:
             elif not sources[sid].get("active"):
                 error(f"{label}: production knowledge uses inactive source {sid}")
         for claim in metadata.get("supported_claims", []):
-            if not isinstance(claim, dict) or not claim.get("claim_id") or not claim.get("source_ids") or not claim.get("evidence_strength"):
+            if (
+                not isinstance(claim, dict)
+                or not claim.get("claim_id")
+                or not claim.get("source_ids")
+                or not claim.get("evidence_strength")
+            ):
                 error(f"{label}: malformed supported claim")
             elif not set(claim["source_ids"]) <= set(metadata.get("source_ids", [])):
                 error(f"{label}: claim source not declared at document level")
@@ -298,9 +382,30 @@ def main() -> int:
         document_id = metadata.get("id")
         playbook_id = metadata.get("playbook_id")
         topic_id = metadata.get("topic_id")
-        require_fields(label, metadata, ("id", "topic_id", "playbook_id", "title", "document_type", "language", "related_concept_ids", "status", "requires_human_review", "index_in_production", "risk_level", "trigger_phrases"))
+        require_fields(
+            label,
+            metadata,
+            (
+                "id",
+                "topic_id",
+                "playbook_id",
+                "title",
+                "document_type",
+                "language",
+                "related_concept_ids",
+                "status",
+                "requires_human_review",
+                "index_in_production",
+                "risk_level",
+                "trigger_phrases",
+            ),
+        )
         validate_status(label, metadata)
-        if not isinstance(document_id, str) or not DOC_ID.fullmatch(document_id) or not document_id.startswith("pb-"):
+        if (
+            not isinstance(document_id, str)
+            or not DOC_ID.fullmatch(document_id)
+            or not document_id.startswith("pb-")
+        ):
             error(f"{label}: invalid playbook document ID {document_id!r}")
         elif document_id in documents:
             error(f"duplicate document ID: {document_id}")
@@ -314,7 +419,10 @@ def main() -> int:
             playbooks[playbook_id] = (path, metadata)
         if topic_id not in topic_meta or path.parents[1].name != topic_id:
             error(f"{label}: invalid topic relationship")
-        if metadata.get("document_type") != "playbook" or metadata.get("language") != "en":
+        if (
+            metadata.get("document_type") != "playbook"
+            or metadata.get("language") != "en"
+        ):
             error(f"{label}: canonical playbook type/language mismatch")
         if len(metadata.get("related_concept_ids", [])) < 1:
             error(f"{label}: playbook has no related concept")
@@ -322,7 +430,9 @@ def main() -> int:
             error(f"{label}: playbook lacks retrieval value")
         word_count = len(re.findall(r"\b\w+\b", body))
         if not 300 <= word_count <= 900:
-            error(f"{label}: playbook body outside 300–900 word safety proxy: {word_count}")
+            error(
+                f"{label}: playbook body outside 300–900 word safety proxy: {word_count}"
+            )
         for heading in PLAYBOOK_HEADINGS:
             if heading not in body:
                 error(f"{label}: missing section {heading}")
@@ -331,7 +441,9 @@ def main() -> int:
         for block in normalized_prose_blocks(path, body):
             prose[block].append(label)
 
-    for duplicate in (name for name, count in Counter(canonical_filenames).items() if count > 1):
+    for duplicate in (
+        name for name, count in Counter(canonical_filenames).items() if count > 1
+    ):
         error(f"duplicate canonical filename: {duplicate}")
     for block, paths in prose.items():
         if len(paths) > 1:
@@ -343,8 +455,16 @@ def main() -> int:
         for related in metadata.get("related_topics", []):
             if related not in topic_meta or related == topic_id:
                 error(f"topic {topic_id}: invalid related topic {related}")
-        actual_concepts = {cid for cid, (_, meta) in concepts.items() if meta.get("topic_id") == topic_id}
-        actual_playbooks = {pid for pid, (_, meta) in playbooks.items() if meta.get("topic_id") == topic_id}
+        actual_concepts = {
+            cid
+            for cid, (_, meta) in concepts.items()
+            if meta.get("topic_id") == topic_id
+        }
+        actual_playbooks = {
+            pid
+            for pid, (_, meta) in playbooks.items()
+            if meta.get("topic_id") == topic_id
+        }
         if set(metadata.get("concept_ids", [])) != actual_concepts:
             error(f"topic {topic_id}: concept_ids do not match files")
         if set(metadata.get("playbook_ids", [])) != actual_playbooks:
@@ -356,11 +476,15 @@ def main() -> int:
     for _, metadata in concepts.values():
         for related in metadata.get("related_concepts", []):
             if related not in concept_ids:
-                error(f"concept {metadata.get('concept_id')}: missing related concept {related}")
+                error(
+                    f"concept {metadata.get('concept_id')}: missing related concept {related}"
+                )
     for _, metadata in playbooks.values():
         for related in metadata.get("related_concept_ids", []):
             if related not in concept_ids:
-                error(f"playbook {metadata.get('playbook_id')}: missing related concept {related}")
+                error(
+                    f"playbook {metadata.get('playbook_id')}: missing related concept {related}"
+                )
 
     quote_rows: list[dict] = []
     for path in sorted(CANONICAL.glob("*/quotes/*.jsonl")):
@@ -377,7 +501,9 @@ def main() -> int:
                 error(f"{relative(path)}: quote source does not exist")
             for concept_id in row.get("concept_ids", []):
                 if concept_id not in concept_ids:
-                    error(f"{relative(path)}: quote concept does not exist: {concept_id}")
+                    error(
+                        f"{relative(path)}: quote concept does not exist: {concept_id}"
+                    )
 
     concept_rows = jsonl_cache.get(RAG / "concept_registry.jsonl", [])
     if len(concept_rows) != len(concepts):
@@ -387,7 +513,9 @@ def main() -> int:
         error("concept registry IDs do not match canonical concepts")
     for concept_id, row in concept_registry.items():
         path, metadata = concepts.get(concept_id, (None, {}))
-        if row.get("topic_id") != metadata.get("topic_id") or row.get("canonical_document_id") != metadata.get("id"):
+        if row.get("topic_id") != metadata.get("topic_id") or row.get(
+            "canonical_document_id"
+        ) != metadata.get("id"):
             error(f"concept registry mismatch for {concept_id}")
         if set(row.get("source_ids", [])) != set(metadata.get("source_ids", [])):
             error(f"concept registry source mismatch for {concept_id}")
@@ -408,13 +536,30 @@ def main() -> int:
             error(f"document registry path mismatch for {document_id}")
         if not (RAG / str(row.get("path", ""))).is_file():
             error(f"document registry path does not exist for {document_id}")
-        if row.get("document_type") != metadata.get("document_type") or row.get("topic_id") != metadata.get("topic_id"):
+        if row.get("document_type") != metadata.get("document_type") or row.get(
+            "topic_id"
+        ) != metadata.get("topic_id"):
             error(f"document registry metadata mismatch for {document_id}")
-        if row.get("concept_id") != metadata.get("concept_id") or row.get("playbook_id") != metadata.get("playbook_id"):
+        if row.get("concept_id") != metadata.get("concept_id") or row.get(
+            "playbook_id"
+        ) != metadata.get("playbook_id"):
             error(f"document registry unit ID mismatch for {document_id}")
-        if row.get("status") != metadata.get("status") or row.get("index_in_production") is not True:
+        if (
+            row.get("status") != metadata.get("status")
+            or row.get("index_in_production") is not True
+        ):
             error(f"document registry editorial mismatch for {document_id}")
-        if any(part in Path(row.get("path", "")).parts for part in ("archive", "migration", "non_indexed", "sources", "feedbacker", "safety")):
+        if any(
+            part in Path(row.get("path", "")).parts
+            for part in (
+                "archive",
+                "migration",
+                "non_indexed",
+                "sources",
+                "feedbacker",
+                "safety",
+            )
+        ):
             error(f"forbidden production path in registry: {row.get('path')}")
 
     expected_source_usage: dict[str, set[str]] = {sid: set() for sid in sources}
@@ -423,35 +568,12 @@ def main() -> int:
             for sid in metadata.get("source_ids", []):
                 expected_source_usage.setdefault(sid, set()).add(document_id)
     for sid, row in sources.items():
-        if set(row.get("used_in_production_documents", [])) != expected_source_usage.get(sid, set()):
+        if set(
+            row.get("used_in_production_documents", [])
+        ) != expected_source_usage.get(sid, set()):
             error(f"{sid}: used_in_production_documents is out of sync")
 
-    for path in (RAG / "non_indexed").glob("*.md"):
-        loaded = load_frontmatter(path)
-        if loaded and loaded[0].get("index_in_production") is not False:
-            error(f"{relative(path)}: non-indexed file is not explicitly excluded")
-    for path in (RAG / "archive").rglob("*.md"):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if re.search(r"^index_in_production:\s*true\s*$", text, re.MULTILINE):
-            error(f"{relative(path)}: archived file claims production indexing")
-
-    mapping_rows = jsonl_cache.get(RAG / "migration" / "FILE_MAPPING.jsonl", [])
-    classification_rows = jsonl_cache.get(RAG / "migration" / "FILE_CLASSIFICATION.jsonl", [])
-    replacement_paths = {
-        row.get("path") for row in classification_rows
-        if row.get("classification") == "replace_control_plane_and_archive"
-    }
-    for row in mapping_rows:
-        if row.get("action") not in {"moved", "merged", "renamed", "archived", "removed"}:
-            error(f"FILE_MAPPING: invalid action {row.get('action')!r}")
-        target = resolve_migration_path(row.get("new_path"))
-        if row.get("action") != "removed" and not target.exists():
-            error(f"FILE_MAPPING: target does not exist: {row.get('new_path')}")
-        original = resolve_migration_path(row.get("original_path"))
-        if row.get("action") == "archived" and original.exists() and row.get("original_path") not in replacement_paths:
-            error(f"FILE_MAPPING: archived original remains active: {row.get('original_path')}")
-
-    for path in RAG.rglob("*"):
+    for path in (path for path in RAG.rglob("*") if is_public_path(path)):
         if path.is_dir() and not any(path.iterdir()):
             error(f"empty directory: {relative(path)}")
     for path in RAG.rglob("*.pyc"):
@@ -468,14 +590,18 @@ def main() -> int:
             "active_quotes": len(quote_rows),
             "production_documents": len(registry),
             "sources": len(sources),
-            "production_sources": sum(bool(row.get("used_in_production_documents")) for row in sources.values()),
-            "migration_mapping_rows": len(mapping_rows),
+            "production_sources": sum(
+                bool(row.get("used_in_production_documents"))
+                for row in sources.values()
+            ),
         },
         "errors": ERRORS,
         "warnings": WARNINGS,
     }
-    report_path = RAG / "migration" / "VALIDATION_REPORT.json"
-    report_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path = RAG / "build" / "validation-report.local.json"
+    report_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not ERRORS else 1
 

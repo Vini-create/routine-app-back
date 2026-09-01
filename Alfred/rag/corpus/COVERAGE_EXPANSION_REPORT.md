@@ -109,7 +109,7 @@ Conceptual overlap was retained only when it supports cross-topic routing. For e
 
 ## Archive and scope controls
 
-No file under `Alfred/rag/corpus/archive/legacy/pre-alfred-20260714/` was moved, copied or reactivated. Archived texts were not treated as evidence and no prior boilerplate was restored. Feedbacker material, critical safety handling, cases, evaluation fixtures, unverified quotations and system prompt candidates remain outside the production registry.
+No archived legacy material was moved, copied or reactivated. Historical snapshots were not treated as evidence and no prior boilerplate was restored. Feedbacker material, critical safety handling, cases, evaluation fixtures, unverified quotations and system prompt candidates remain outside the production registry and public corpus.
 
 ## Remaining work and limitations
 

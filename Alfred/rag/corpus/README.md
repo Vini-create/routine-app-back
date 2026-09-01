@@ -8,11 +8,11 @@ in the user's original language.
 ## Runtime boundary
 
 ```text
-original input
-→ English translation and normalization
+original multilingual input
+→ normalization and deterministic topic hints
 → Security Gate
 → decision whether RAG is needed
-→ typed FAISS retrieval
+→ dense + BM25 retrieval and deterministic reranking
 → Main LLM
 → answer in the original language
 ```
@@ -45,6 +45,7 @@ Run:
 python Alfred/rag/corpus/scripts/validate_rag.py
 ```
 
-The pre-migration tree is preserved under
-`archive/legacy/pre-alfred-20260714/`; every movement is recorded in
-`migration/FILE_MAPPING.jsonl`.
+Historical migration snapshots and internal prompt/security candidates are
+kept outside public version control. The public corpus contains the canonical
+documents, registries, validation contracts, source metadata, and reproducible
+runtime build artifacts.

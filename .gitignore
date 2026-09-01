@@ -1,14 +1,34 @@
-# Python-generated files
+# Environment
+.env
+.env.*
+!.env.example
+.direnv/
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+credentials/
+secrets/
+
+# Dependencies and virtual environments
+.venv/
+venv/
+ENV/
+
+# Python build and packaging
 __pycache__/
-*.py[oc]
+*.py[cod]
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
-# Alfred's audited RAG corpus is a required runtime asset. Keep generated build
-# directories ignored globally, but version the two small canonical artifacts
-# that the production retriever validates and loads.
+# Alfred's audited RAG build is required at runtime. Keep the global build
+# ignore while allowing only the validated production artifacts.
 !Alfred/rag/corpus/build/
 Alfred/rag/corpus/build/*
 !Alfred/rag/corpus/build/chunks.jsonl
@@ -21,26 +41,53 @@ Alfred/rag/corpus/build/faiss/*
 !Alfred/rag/corpus/build/faiss/playbooks.metadata.jsonl
 !Alfred/rag/corpus/build/faiss/manifest.json
 
-# Virtual environments
-.venv
-.env
-.env.*
-!.env.example
-
-# Tooling / caches
+# Tooling, tests, and coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+.tox/
+.nox/
+.hypothesis/
 
-# OS / editor
-.DS_Store
+# Logs, local databases, and backups
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+backup/
+backups/
+
+# IDE and editor files
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
+# Local development notes
 steps.txt
 frontend_api_flow.txt
 AI_ARCHITECTURE.md
 AI_IMPLEMENTATION_STUDY_GUIDE.md
 FRONTEND_AI_INTEGRATION_GUIDE.md
 WINPERIUM_AI_GRAPH_IMPLEMENTATION_PLAN_V2.md
+
+# Internal RAG migration material (kept locally, excluded from public tracking)
+Alfred/rag/corpus/archive/
+Alfred/rag/corpus/migration/
+Alfred/rag/corpus/non_indexed/
+
+# Local ML and notebook artifacts
+.ipynb_checkpoints/
+wandb/
+mlruns/
+
+# OS files
+.DS_Store
+Thumbs.db

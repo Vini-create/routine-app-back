@@ -22,7 +22,7 @@ Fontes de implementação:
 
 ```mermaid
 flowchart TD
-    U([POST /ai/invoke ou /ai/stream])
+    U([POST /api/v1/ai/invoke ou /api/v1/ai/stream])
 
     subgraph PRE["A. Preflight do AIOrchestrator"]
         P1[Busca replay por idempotency_key]

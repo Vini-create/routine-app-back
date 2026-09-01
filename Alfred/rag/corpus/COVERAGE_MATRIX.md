@@ -49,7 +49,7 @@ Only `weak` and `missing` items that pass all document-creation criteria are pro
 | 15 | user wants to compensate for missed work | `missing` | no escalation/recovery policy | Create `pb-user-wants-to-compensate`; prevent load spikes and choose resume, redistribute, or deliberately drop. |
 | 16 | user repeatedly postpones | `partially_covered` | cannot-start plus procrastination pattern | Existing tree applies; new mechanism documents will improve retrieval without a new playbook. |
 | 17 | user rejects suggestions | `well_covered` | `pb-user-rejects-suggestion` | Existing policy protects autonomy and stops suggestion loops. |
-| 18 | user only wants to be heard | `intentionally_out_of_scope` | `non_indexed/system_prompt_candidates.md` | Conversational-mode detection is system behavior, not evidence-bearing topical content. |
+| 18 | user only wants to be heard | `intentionally_out_of_scope` | system behavior, not a corpus document | Conversational-mode detection is system behavior, not evidence-bearing topical content. |
 | 19 | user is making sustainable progress | `missing` | self-monitoring records but does not guide reinforcement/adjustment | Create `pb-user-is-progressing-sustainably`; preserve what works and avoid needless escalation. |
 | 20 | user wants to increase difficulty too quickly | `missing` | no progression policy | Create `pb-user-increases-difficulty-too-quickly`; assess stability, cost, and one-variable progression. |
 | 21 | user's environment creates friction | `partially_covered` | cannot-start and habit context | Add a directly retrievable environment concept; reuse current initiation playbook. |

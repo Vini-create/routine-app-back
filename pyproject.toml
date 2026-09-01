@@ -1,7 +1,7 @@
 [project]
 name = "back-routine-app"
 version = "0.1.0"
-description = "Add your description here"
+description = "Async routine-management API with a safety-aware AI coach and hybrid RAG"
 readme = "README.md"
 requires-python = ">=3.13,<3.15"
 dependencies = [

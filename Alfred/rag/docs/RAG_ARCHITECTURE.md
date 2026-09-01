@@ -18,7 +18,7 @@ A arquitetura separa quatro responsabilidades:
 1. preparação e governança do corpus;
 2. carregamento do índice FAISS auditado e embedding da consulta;
 3. classificação e recuperação de contexto;
-4. orquestração conversacional, realizada pelo futuro grafo da aplicação.
+4. orquestração conversacional no grafo LangGraph da aplicação.
 
 O RAG é um componente do fluxo do Alfred, não o agente completo. Mensagens que
 não precisam de conhecimento especializado podem seguir sem recuperação, e
@@ -234,7 +234,6 @@ sem reescrever o grafo conversacional.
 - FAISS com vetores de documentos pré-computados
 - NumPy
 - LangChain OpenAI
-- NumPy
 - tiktoken
 - PyYAML
 - pytest
