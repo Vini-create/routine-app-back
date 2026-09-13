@@ -41,6 +41,7 @@ from app.ai.schemas.critic import CriticReview
     [
         {"temperature": 2.1},
         {"max_tokens": 0},
+        {"max_retries": -1},
         {"top_p": 1.1},
         {"frequency_penalty": -2.1},
         {"presence_penalty": 2.1},
@@ -135,6 +136,7 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
                 max_tokens=3_600,
                 reasoning_effort="medium",
                 verbosity="medium",
+                max_retries=0,
             ),
             ModelRole.CRITIC: ModelSpec(
                 model="gpt-4o-mini",
@@ -144,6 +146,7 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
                 top_p=1.0,
                 frequency_penalty=0.0,
                 presence_penalty=0.0,
+                max_retries=0,
             ),
         },
         timeout_seconds=45.0,
@@ -179,12 +182,14 @@ def test_gateway_only_sends_parameters_supported_by_each_model_role() -> None:
     assert "verbosity" not in by_model_role[ModelRole.ALFRED]
     assert by_model_role[ModelRole.CRITIC]["temperature"] == 0.0
     assert by_model_role[ModelRole.CRITIC]["max_tokens"] == 800
+    assert by_model_role[ModelRole.CRITIC]["max_retries"] == 0
 
     assert by_model_role[ModelRole.FEEDBACKER]["model"] == "gpt-5"
     assert by_model_role[ModelRole.FEEDBACKER]["use_responses_api"] is True
     assert by_model_role[ModelRole.FEEDBACKER]["max_tokens"] == 3_600
     assert by_model_role[ModelRole.FEEDBACKER]["reasoning_effort"] == "medium"
     assert by_model_role[ModelRole.FEEDBACKER]["verbosity"] == "medium"
+    assert by_model_role[ModelRole.FEEDBACKER]["max_retries"] == 0
     for unsupported_parameter in (
         "temperature",
         "top_p",
@@ -202,6 +207,13 @@ def test_default_alfred_model_uses_the_cost_efficient_conversational_tier() -> N
     assert spec.use_responses_api is False
     assert spec.temperature == 0.3
     assert spec.max_tokens == 1_300
+
+
+def test_slow_analytical_roles_do_not_retry_past_the_graph_deadline() -> None:
+    gateway = build_default_model_gateway()
+
+    assert gateway._specs[ModelRole.FEEDBACKER].max_retries == 0
+    assert gateway._specs[ModelRole.CRITIC].max_retries == 0
 
 
 class FakeModelGateway:
@@ -584,7 +596,10 @@ async def test_explicit_change_fallback_survives_the_complete_graph() -> None:
     assert result["patch_requires_confirmation"] is True
     assert result["final_response"]["requires_confirmation"] is True
     assert ModelRole.FEEDBACKER not in gateway.calls
-    assert "Nada será alterado sem a sua confirmação" in result["final_response"]["message"]
+    assert (
+        "Nada será alterado sem a sua confirmação"
+        in result["final_response"]["message"]
+    )
 
 
 @pytest.mark.asyncio
@@ -658,3 +673,19 @@ async def test_model_failure_is_explicit_and_uses_localized_fallback() -> None:
     assert "alfred_model" in result["unavailable_components"]
     assert result["errors"][-1]["code"] == AIErrorCode.MODEL_UNAVAILABLE.value
     assert result["token_usage"]["model_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_feedbacker_failure_skips_critic_and_returns_fallback() -> None:
+    gateway = FakeModelGateway(fail_role=ModelRole.FEEDBACKER)
+    result = await invoke(
+        state("Analise profundamente meus últimos 30 dias de rotina."),
+        gateway,
+    )
+
+    assert gateway.calls == [ModelRole.FEEDBACKER]
+    assert result["degraded_mode"] is True
+    assert result["critic_required"] is False
+    assert result["final_response"]["message"].startswith(
+        "Consegui calcular suas métricas"
+    )

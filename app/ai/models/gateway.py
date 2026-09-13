@@ -39,12 +39,15 @@ class ModelSpec:
     presence_penalty: float | None = None
     reasoning_effort: str | None = None
     verbosity: str | None = None
+    max_retries: int | None = None
 
     def __post_init__(self) -> None:
         if self.temperature is not None and not 0.0 <= self.temperature <= 2.0:
             raise ValueError("temperature must be between 0 and 2.")
         if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError("max_tokens must be greater than zero.")
+        if self.max_retries is not None and self.max_retries < 0:
+            raise ValueError("max_retries cannot be negative.")
         if self.top_p is not None and not 0.0 <= self.top_p <= 1.0:
             raise ValueError("top_p must be between 0 and 1.")
         for name, value in (
@@ -54,8 +57,7 @@ class ModelSpec:
             if value is not None and not -2.0 <= value <= 2.0:
                 raise ValueError(f"{name} must be between -2 and 2.")
         if self.use_responses_api and (
-            self.frequency_penalty is not None
-            or self.presence_penalty is not None
+            self.frequency_penalty is not None or self.presence_penalty is not None
         ):
             raise ValueError(
                 "frequency_penalty and presence_penalty are not supported "
@@ -106,7 +108,11 @@ class LangChainOpenAIModelGateway:
                 "api_key": self._api_key,
                 "use_responses_api": spec.use_responses_api,
                 "timeout": self._timeout_seconds,
-                "max_retries": self._max_retries,
+                "max_retries": (
+                    spec.max_retries
+                    if spec.max_retries is not None
+                    else self._max_retries
+                ),
                 "store": False,
             }
             optional_parameters = {
@@ -224,6 +230,10 @@ def build_default_model_gateway() -> LangChainOpenAIModelGateway:
                 presence_penalty=None,
                 reasoning_effort="medium",
                 verbosity="medium",
+                # The analytical route also runs a critic. Retrying this
+                # slower model at the SDK layer could consume 3 x 45 seconds
+                # before our 110-second graph deadline can use its fallback.
+                max_retries=0,
             ),
             ModelRole.CRITIC: ModelSpec(
                 model=settings.ai_critic_model,
@@ -233,6 +243,9 @@ def build_default_model_gateway() -> LangChainOpenAIModelGateway:
                 top_p=1.0,
                 frequency_penalty=0.0,
                 presence_penalty=0.0,
+                # Keep the combined Feedbacker + critic worst-case latency
+                # inside the graph-level request timeout.
+                max_retries=0,
             ),
         },
         timeout_seconds=settings.ai_model_timeout_seconds,

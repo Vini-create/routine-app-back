@@ -26,10 +26,18 @@ from app.ai.services.patch_service import (
 
 async def decide_critic_use_node(state: AgentState) -> dict[str, Any]:
     route = state.get("route")
-    required = route in {
-        InternalRoute.FEEDBACKER,
-        InternalRoute.RAG_THEN_FEEDBACKER,
-    } or state.get("proposed_patch") is not None
+    feedbacker_unavailable = "feedbacker_model" in state.get(
+        "unavailable_components",
+        [],
+    )
+    required = state.get("proposed_patch") is not None or (
+        route
+        in {
+            InternalRoute.FEEDBACKER,
+            InternalRoute.RAG_THEN_FEEDBACKER,
+        }
+        and not feedbacker_unavailable
+    )
     return traced_update(
         state,
         "decidir_uso_critico",
@@ -227,9 +235,7 @@ async def prepare_confirmation_node(
         confirmation_prepared=True,
     )
     graph_context = (
-        runtime.context
-        if runtime is not None and runtime.context is not None
-        else None
+        runtime.context if runtime is not None and runtime.context is not None else None
     )
     persisted_patch_id = state.get("patch_id")
     public_patch = state.get("proposed_patch")
